@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --app-height: 100%;
+}
+
+html {
+  font-family: 'Ubuntu Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  overscroll-behavior-y: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Headings use Montserrat */
+h1, h2, h3, h4, h5, h6, .font-heading {
+  font-family: 'Montserrat', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* Refined Apple-style ultra-thin scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(194, 65, 12, 0.2);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(194, 65, 12, 0.4);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Glassmorphism primitives */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(194, 65, 12, 0.08);
+}
+
+.dark .glass-panel {
+  background: rgba(18, 18, 20, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Sprayed Rust & Airbrush Texture Primitives */
+.spray-rust-spot {
+  background: radial-gradient(circle at center, rgba(194, 65, 12, 0.24) 0%, rgba(224, 122, 95, 0.12) 40%, transparent 70%);
+  filter: blur(35px);
+  pointer-events-none;
+}
+
+.spray-amber-spot {
+  background: radial-gradient(circle at center, rgba(217, 119, 6, 0.2) 0%, rgba(180, 83, 9, 0.08) 45%, transparent 75%);
+  filter: blur(40px);
+  pointer-events-none;
+}
+
+/* Subtle airbrush / sprayed grain layer */
+.spray-grain-overlay {
+  background-image: radial-gradient(rgba(194, 65, 12, 0.14) 1px, transparent 0), radial-gradient(rgba(217, 119, 6, 0.08) 1px, transparent 0);
+  background-size: 24px 24px;
+  background-position: 0 0, 12px 12px;
+  opacity: 0.35;
+  pointer-events-none;
+}
+
+.dark .spray-grain-overlay {
+  opacity: 0.22;
+}
+
+/* Sprayed card with subtle copper/rust highlight border */
+.spray-card {
+  position: relative;
+  background: white;
+  border: 1px solid rgba(220, 100, 40, 0.18);
+  box-shadow: 0 4px 20px -2px rgba(194, 65, 12, 0.06);
+}
+
+.dark .spray-card {
+  background: #111113;
+  border: 1px solid rgba(194, 65, 12, 0.22);
+  box-shadow: 0 4px 25px -2px rgba(0, 0, 0, 0.6), 0 0 15px -3px rgba(194, 65, 12, 0.12);
+}
+
+/* Smooth motion for buttons */
+button, a {
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+button:active, a:active {
+  transform: scale(0.975);
+}

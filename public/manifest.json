@@ -1,0 +1,16 @@
+{
+  "short_name": "RetailKhata",
+  "name": "RetailKhata - Daily Sales & AI Invoice Scanner",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#4f46e5",
+  "theme_color": "#4f46e5",
+  "display": "standalone",
+  "orientation": "portrait"
+}
