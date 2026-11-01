@@ -1,12 +1,17 @@
 import Database from 'better-sqlite3';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Initialize persistent SQLite database
-const dbPath = path.join(__dirname, '..', 'retail_database.sqlite');
+// Initialize persistent SQLite database (configurable for cloud persistent disks via DB_PATH)
+const dbPath = process.env.DB_PATH || path.join(__dirname, '..', 'retail_database.sqlite');
+const dbDir = path.dirname(dbPath);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
 const db = new Database(dbPath);
 
 // Enable WAL mode (Write-Ahead Logging) for superior concurrent performance & reliability
