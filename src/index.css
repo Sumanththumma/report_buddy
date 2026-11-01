@@ -69,13 +69,13 @@ h1, h2, h3, h4, h5, h6, .font-heading {
 .spray-rust-spot {
   background: radial-gradient(circle at center, rgba(194, 65, 12, 0.24) 0%, rgba(224, 122, 95, 0.12) 40%, transparent 70%);
   filter: blur(35px);
-  pointer-events-none;
+  pointer-events: none;
 }
 
 .spray-amber-spot {
   background: radial-gradient(circle at center, rgba(217, 119, 6, 0.2) 0%, rgba(180, 83, 9, 0.08) 45%, transparent 75%);
   filter: blur(40px);
-  pointer-events-none;
+  pointer-events: none;
 }
 
 /* Subtle airbrush / sprayed grain layer */
@@ -84,7 +84,7 @@ h1, h2, h3, h4, h5, h6, .font-heading {
   background-size: 24px 24px;
   background-position: 0 0, 12px 12px;
   opacity: 0.35;
-  pointer-events-none;
+  pointer-events: none;
 }
 
 .dark .spray-grain-overlay {

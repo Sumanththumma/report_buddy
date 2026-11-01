@@ -54,7 +54,7 @@ export const Header = ({ onOpenSettings, onOpenAuth, onOpenPersonalization }) =>
                 {user?.shop_name || 'RetailKhata'}
               </span>
             </div>
-            <span className="text-[10px] text-neutral-400 dark:text-zinc-500 font-medium tracking-tight">
+            <span className="text-[10px] text-neutral-500 dark:text-zinc-400 font-medium tracking-tight">
               {user?.store_category || 'Store Intelligence'}
             </span>
           </div>
@@ -64,7 +64,7 @@ export const Header = ({ onOpenSettings, onOpenAuth, onOpenPersonalization }) =>
         <div className="relative" ref={menuRef}>
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-500 dark:text-zinc-400 hover:text-neutral-900 dark:hover:text-zinc-100 hover:bg-neutral-100 dark:hover:bg-zinc-900 transition-all border border-neutral-200/60 dark:border-zinc-800/80"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-neutral-700 dark:text-zinc-300 hover:text-neutral-950 dark:hover:text-zinc-100 hover:bg-neutral-100 dark:hover:bg-zinc-850 transition-all border border-neutral-300/80 dark:border-zinc-800"
             aria-label="Settings Menu"
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
@@ -72,14 +72,14 @@ export const Header = ({ onOpenSettings, onOpenAuth, onOpenPersonalization }) =>
 
           {/* Apple / shadcn Refined Floating Popover Menu */}
           {isMenuOpen && (
-            <div className="absolute right-0 mt-2 w-56 rounded-2xl p-1.5 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-2xl border border-neutral-200/80 dark:border-zinc-800/80 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150 text-xs">
+            <div className="absolute right-0 mt-2 w-56 rounded-2xl p-1.5 bg-white dark:bg-zinc-900 border border-neutral-200 dark:border-zinc-800 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150 text-xs">
               {/* User Identity Header */}
               {isAuthenticated && (
                 <div className="px-3 py-2 border-b border-neutral-100 dark:border-zinc-800/60 mb-1">
                   <p className="font-semibold text-neutral-900 dark:text-zinc-100 truncate">
                     {user.owner_name || 'Store Manager'}
                   </p>
-                  <p className="text-[10px] text-neutral-400 dark:text-zinc-500 truncate mt-0.5">
+                  <p className="text-[10px] text-neutral-500 dark:text-zinc-400 truncate mt-0.5">
                     {user.email}
                   </p>
                 </div>
@@ -91,18 +91,18 @@ export const Header = ({ onOpenSettings, onOpenAuth, onOpenPersonalization }) =>
                 onClick={() => {
                   toggleDarkMode();
                 }}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-neutral-700 dark:text-zinc-300 hover:bg-neutral-100 dark:hover:bg-zinc-800/80 transition-colors"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-neutral-800 dark:text-zinc-200 hover:bg-neutral-100 dark:hover:bg-zinc-800 transition-colors"
               >
                 <div className="flex items-center gap-2.5">
                   {isDarkMode ? (
-                    <Moon className="w-3.5 h-3.5 text-zinc-300" />
+                    <Moon className="w-3.5 h-3.5 text-rust-300" />
                   ) : (
-                    <Sun className="w-3.5 h-3.5 text-amber-500" />
+                    <Sun className="w-3.5 h-3.5 text-amber-600" />
                   )}
-                  <span>Dark Appearance</span>
+                  <span className="font-medium">Dark Appearance</span>
                 </div>
                 <div className={`w-8 h-4.5 rounded-full p-0.5 transition-colors ${
-                  isDarkMode ? 'bg-zinc-700' : 'bg-neutral-300'
+                  isDarkMode ? 'bg-rust-600' : 'bg-neutral-300'
                 }`}>
                   <div className={`w-3.5 h-3.5 rounded-full bg-white shadow-xs transition-transform ${
                     isDarkMode ? 'translate-x-3.5' : 'translate-x-0'
@@ -117,10 +117,10 @@ export const Header = ({ onOpenSettings, onOpenAuth, onOpenPersonalization }) =>
                   setIsMenuOpen(false);
                   onOpenPersonalization();
                 }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-neutral-700 dark:text-zinc-300 hover:bg-neutral-100 dark:hover:bg-zinc-800/80 transition-colors"
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-neutral-800 dark:text-zinc-200 hover:bg-neutral-100 dark:hover:bg-zinc-800 transition-colors"
               >
-                <Palette className="w-3.5 h-3.5 text-neutral-400 dark:text-zinc-400" />
-                <span>Branding & Appearance</span>
+                <Palette className="w-3.5 h-3.5 text-rust-600 dark:text-rust-400" />
+                <span className="font-medium">Branding & Appearance</span>
               </button>
 
               {/* AI Key & System Settings */}
@@ -130,10 +130,10 @@ export const Header = ({ onOpenSettings, onOpenAuth, onOpenPersonalization }) =>
                   setIsMenuOpen(false);
                   onOpenSettings();
                 }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-neutral-700 dark:text-zinc-300 hover:bg-neutral-100 dark:hover:bg-zinc-800/80 transition-colors"
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-neutral-800 dark:text-zinc-200 hover:bg-neutral-100 dark:hover:bg-zinc-800 transition-colors"
               >
-                <Settings className="w-3.5 h-3.5 text-neutral-400 dark:text-zinc-400" />
-                <span>Store & AI Settings</span>
+                <Settings className="w-3.5 h-3.5 text-neutral-500 dark:text-zinc-400" />
+                <span className="font-medium">Store & AI Settings</span>
               </button>
 
               {/* Divider */}
@@ -147,7 +147,7 @@ export const Header = ({ onOpenSettings, onOpenAuth, onOpenPersonalization }) =>
                     setIsMenuOpen(false);
                     logout();
                   }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors font-medium"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   <span>Sign Out</span>
@@ -159,9 +159,9 @@ export const Header = ({ onOpenSettings, onOpenAuth, onOpenPersonalization }) =>
                     setIsMenuOpen(false);
                     onOpenAuth();
                   }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-neutral-900 dark:text-zinc-100 font-semibold hover:bg-neutral-100 dark:hover:bg-zinc-800/80 transition-colors"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-neutral-900 dark:text-zinc-100 font-semibold hover:bg-neutral-100 dark:hover:bg-zinc-800 transition-colors"
                 >
-                  <LogIn className="w-3.5 h-3.5 text-neutral-400" />
+                  <LogIn className="w-3.5 h-3.5 text-rust-600 dark:text-rust-400" />
                   <span>Sign In / Create Store</span>
                 </button>
               )}
