@@ -93,3 +93,17 @@ export const zReportsApi = {
     method: 'DELETE'
   })
 };
+
+// Backup, Export, Import & Server Persistence Endpoints
+export const backupApi = {
+  exportData: () => request('/backup/export'),
+  importData: (payload) => request('/backup/import', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  }),
+  getStatus: () => request('/backup/status'),
+  bulkSync: (payload) => request('/sync/bulk', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  })
+};

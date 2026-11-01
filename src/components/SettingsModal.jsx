@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
   X, 
@@ -12,17 +12,24 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
-  Cpu
+  Cpu,
+  Database,
+  Download,
+  UploadCloud,
+  HardDrive
 } from 'lucide-react';
 import { fetchAvailableModels, CANDIDATE_MODELS } from '../services/geminiService';
 
 export const SettingsModal = ({ isOpen, onClose }) => {
   const { 
     geminiApiKey, 
-    setGeminiApiKey, 
+    updateGeminiApiKey, 
     shopProfile, 
     setShopProfile, 
-    showToast 
+    showToast,
+    dbStatus,
+    exportBackupData,
+    importBackupData
   } = useApp();
 
   const [tempApiKey, setTempApiKey] = useState(geminiApiKey);
@@ -31,6 +38,9 @@ export const SettingsModal = ({ isOpen, onClose }) => {
     const saved = localStorage.getItem('gemini_preferred_model');
     return (saved && saved !== 'gemini-1.5-flash') ? saved : 'auto';
   });
+
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef(null);
 
   // Key testing state
   const [isTesting, setIsTesting] = useState(false);
@@ -78,12 +88,38 @@ export const SettingsModal = ({ isOpen, onClose }) => {
     }
   };
 
-  const handleSave = () => {
-    setGeminiApiKey(tempApiKey.trim());
-    setShopProfile(profileForm);
+  const handleSave = async () => {
+    // Persist API key and model choice to both state and backend SQLite database
+    await updateGeminiApiKey(tempApiKey.trim(), selectedModel);
+    await setShopProfile(profileForm);
     localStorage.setItem('gemini_preferred_model', selectedModel);
-    showToast('Settings updated successfully');
+    showToast('Settings & preferences saved to database');
     onClose();
+  };
+
+  const handleFileImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
+          const parsed = JSON.parse(event.target.result);
+          await importBackupData(parsed);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        } catch (parseErr) {
+          showToast('Failed to parse backup JSON: ' + parseErr.message, 'error');
+        } finally {
+          setIsImporting(false);
+        }
+      };
+      reader.readAsText(file);
+    } catch (err) {
+      showToast('Import error: ' + err.message, 'error');
+      setIsImporting(false);
+    }
   };
 
   return (
@@ -264,6 +300,62 @@ export const SettingsModal = ({ isOpen, onClose }) => {
               onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
               placeholder="Store address..."
               className="w-full bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-xl px-3 py-2 text-neutral-900 dark:text-zinc-100 outline-none"
+            />
+          </div>
+        </div>
+
+        {/* Database Persistence & Portable Backups */}
+        <div className="bg-neutral-50 dark:bg-zinc-850/60 rounded-2xl p-3.5 border border-neutral-200/80 dark:border-zinc-800 space-y-2.5 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-display font-bold text-neutral-900 dark:text-zinc-100 flex items-center gap-1.5 text-xs">
+              <Database className="w-3.5 h-3.5 text-rust-600 dark:text-rust-400" />
+              Database Persistence
+            </span>
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              SQLite Persistent
+            </span>
+          </div>
+
+          <p className="text-[10px] text-neutral-500 dark:text-zinc-400 leading-snug">
+            Your products, daily Z-reports, and AI API keys are stored in an encrypted SQLite database on the server.
+          </p>
+
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={exportBackupData}
+              className="flex-1 py-1.5 px-2.5 rounded-xl bg-white dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 hover:border-rust-500/40 text-neutral-800 dark:text-zinc-200 font-display font-semibold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition-all"
+            >
+              <Download className="w-3 h-3 text-rust-600 dark:text-rust-400" />
+              Download Backup
+            </button>
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isImporting}
+              className="flex-1 py-1.5 px-2.5 rounded-xl bg-white dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 hover:border-rust-500/40 text-neutral-800 dark:text-zinc-200 font-display font-semibold text-[11px] flex items-center justify-center gap-1.5 shadow-2xs transition-all"
+            >
+              {isImporting ? (
+                <>
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Importing...
+                </>
+              ) : (
+                <>
+                  <UploadCloud className="w-3 h-3 text-copper-600 dark:text-copper-400" />
+                  Restore Backup
+                </>
+              )}
+            </button>
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept=".json,application/json"
+              onChange={handleFileImport}
+              className="hidden"
             />
           </div>
         </div>

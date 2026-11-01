@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
-import { productsApi, zReportsApi } from '../services/api';
+import { productsApi, zReportsApi, backupApi } from '../services/api';
 
 const AppContext = createContext();
 
@@ -92,7 +92,17 @@ export const AppProvider = ({ children }) => {
   });
 
   const [geminiApiKey, setGeminiApiKey] = useState(() => {
-    return localStorage.getItem('gemini_free_api_key') || '';
+    return user?.gemini_api_key || localStorage.getItem('gemini_free_api_key') || '';
+  });
+
+  // Server SQLite persistence status
+  const [dbStatus, setDbStatus] = useState({
+    isConnected: false,
+    engine: 'SQLite WAL',
+    persistent: true,
+    totalProducts: 0,
+    totalZReports: 0,
+    lastSynced: null
   });
 
   // Navigation state
@@ -112,36 +122,79 @@ export const AppProvider = ({ children }) => {
     gstin: user?.gstin || '29ABCDE1234F1Z5',
     currency: user?.currency || '₹',
     email: user?.email || 'owner@retailstore.com',
-    role: user?.role || 'owner'
+    role: user?.role || 'owner',
+    storeCategory: user?.store_category || 'General Retail',
+    tagline: user?.tagline || 'Your neighborhood retail shop'
   };
 
-  // Synchronize with backend database when user changes or logs in
+  // Synchronize with backend SQLite database when user changes or logs in
   useEffect(() => {
     const fetchRemoteData = async () => {
       if (!isAuthenticated) return;
       try {
-        // Fetch products from database
+        // Sync API key from persistent user profile
+        if (user?.gemini_api_key) {
+          setGeminiApiKey(user.gemini_api_key);
+          localStorage.setItem('gemini_free_api_key', user.gemini_api_key);
+        }
+
+        // Auto-merge any local cached products/reports into persistent SQLite
+        const localProducts = JSON.parse(localStorage.getItem('retail_products') || '[]');
+        const localReports = JSON.parse(localStorage.getItem('retail_z_reports') || '[]');
+
+        if (localProducts.length > 0 || localReports.length > 0) {
+          try {
+            const syncRes = await backupApi.bulkSync({
+              products: localProducts,
+              zReports: localReports
+            });
+            if (syncRes.products) {
+              setProducts(syncRes.products);
+              localStorage.setItem('retail_products', JSON.stringify(syncRes.products));
+            }
+            if (syncRes.zReports) {
+              setZReports(syncRes.zReports);
+              localStorage.setItem('retail_z_reports', JSON.stringify(syncRes.zReports));
+            }
+          } catch (syncErr) {
+            console.warn('Bulk sync deferral:', syncErr.message);
+          }
+        }
+
+        // Fetch authoritative products from SQLite database
         const prodRes = await productsApi.getAll();
         if (prodRes.products) {
           setProducts(prodRes.products);
           localStorage.setItem('retail_products', JSON.stringify(prodRes.products));
         }
 
-        // Fetch Z-reports from database
+        // Fetch authoritative Z-reports from SQLite database
         const zRes = await zReportsApi.getAll();
         if (zRes.zReports) {
           setZReports(zRes.zReports);
           localStorage.setItem('retail_z_reports', JSON.stringify(zRes.zReports));
         }
+
+        // Check SQLite persistence health status
+        const statusRes = await backupApi.getStatus().catch(() => ({}));
+        setDbStatus({
+          isConnected: true,
+          engine: statusRes.engine || 'SQLite WAL',
+          persistent: true,
+          totalProducts: prodRes.products?.length || statusRes.totalProducts || 0,
+          totalZReports: zRes.zReports?.length || statusRes.totalZReports || 0,
+          lastSynced: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        });
       } catch (err) {
         console.warn('Backend sync failed, using cached store data:', err.message);
+        setDbStatus(prev => ({ ...prev, isConnected: false }));
       }
     };
 
     fetchRemoteData();
-  }, [isAuthenticated, user?.id]);
+  }, [isAuthenticated, user?.id, user?.gemini_api_key]);
 
-  // Sync state to LocalStorage as offline backup
+  // Sync state to LocalStorage as offline backup cache
   useEffect(() => {
     localStorage.setItem('retail_products', JSON.stringify(products));
   }, [products]);
@@ -280,6 +333,26 @@ export const AppProvider = ({ children }) => {
     showToast('Z-Report entry deleted');
   };
 
+  const updateGeminiApiKey = async (newKey, preferredModel) => {
+    const cleanKey = (newKey || '').trim();
+    setGeminiApiKey(cleanKey);
+    localStorage.setItem('gemini_free_api_key', cleanKey);
+    if (preferredModel) {
+      localStorage.setItem('gemini_preferred_model', preferredModel);
+    }
+
+    if (isAuthenticated) {
+      try {
+        await updateUserProfile({
+          geminiApiKey: cleanKey,
+          geminiPreferredModel: preferredModel || localStorage.getItem('gemini_preferred_model') || 'gemini-2.0-flash'
+        });
+      } catch (err) {
+        console.warn('API key stored locally, remote sync deferred:', err.message);
+      }
+    }
+  };
+
   const setShopProfile = async (newProfile) => {
     if (isAuthenticated) {
       try {
@@ -287,11 +360,76 @@ export const AppProvider = ({ children }) => {
           shopName: newProfile.name,
           ownerName: newProfile.owner,
           gstin: newProfile.gstin,
-          currency: newProfile.currency
+          currency: newProfile.currency,
+          address: newProfile.address,
+          phone: newProfile.phone,
+          geminiApiKey: geminiApiKey || undefined
         });
       } catch (err) {
         console.warn('Profile update locally stored:', err.message);
       }
+    }
+  };
+
+  // Export full persistent backup JSON
+  const exportBackupData = async () => {
+    try {
+      let exportObj;
+      if (isAuthenticated) {
+        exportObj = await backupApi.exportData();
+      } else {
+        // Build export from local state if offline
+        exportObj = {
+          app: 'RetailKhata',
+          version: '2.0.0',
+          exportedAt: new Date().toISOString(),
+          user: { ...shopProfile, geminiApiKey },
+          products,
+          zReports
+        };
+      }
+
+      const jsonString = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(exportObj, null, 2))}`;
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute('href', jsonString);
+      downloadAnchor.setAttribute('download', `retailkhata_backup_${new Date().toISOString().split('T')[0]}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+
+      showToast('Exported complete shop backup JSON');
+    } catch (err) {
+      console.error('Backup export failed:', err);
+      showToast('Failed to export backup: ' + err.message, 'error');
+    }
+  };
+
+  // Import and restore from backup JSON
+  const importBackupData = async (jsonData) => {
+    try {
+      if (!jsonData || (!jsonData.products && !jsonData.zReports)) {
+        throw new Error('Invalid RetailKhata backup format');
+      }
+
+      if (isAuthenticated) {
+        const res = await backupApi.importData(jsonData);
+        // Refresh products and z-reports from SQLite
+        const prodRes = await productsApi.getAll();
+        if (prodRes.products) setProducts(prodRes.products);
+        const zRes = await zReportsApi.getAll();
+        if (zRes.zReports) setZReports(zRes.zReports);
+        showToast(res.message || 'Restored successfully from backup');
+      } else {
+        // Restore locally
+        if (Array.isArray(jsonData.products)) setProducts(jsonData.products);
+        if (Array.isArray(jsonData.zReports)) setZReports(jsonData.zReports);
+        if (jsonData.user?.geminiApiKey) setGeminiApiKey(jsonData.user.geminiApiKey);
+        showToast('Restored backup into local session');
+      }
+    } catch (err) {
+      console.error('Import failed:', err);
+      showToast('Failed to restore backup: ' + err.message, 'error');
+      throw err;
     }
   };
 
@@ -349,6 +487,10 @@ export const AppProvider = ({ children }) => {
         setShopProfile,
         geminiApiKey,
         setGeminiApiKey,
+        updateGeminiApiKey,
+        dbStatus,
+        exportBackupData,
+        importBackupData,
         activeTab,
         setActiveTab,
         selectedJournalDate,

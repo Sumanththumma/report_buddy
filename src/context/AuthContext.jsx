@@ -9,6 +9,20 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
 
+  // Helper to sync server-persisted user preferences to browser caches
+  const syncUserPreferences = (userData) => {
+    if (!userData) return;
+    if (userData.gemini_api_key) {
+      localStorage.setItem('gemini_free_api_key', userData.gemini_api_key);
+    }
+    if (userData.gemini_preferred_model) {
+      localStorage.setItem('gemini_preferred_model', userData.gemini_preferred_model);
+    }
+    if (userData.dark_mode !== undefined && userData.dark_mode !== null) {
+      localStorage.setItem('retail_dark_mode', userData.dark_mode ? 'true' : 'false');
+    }
+  };
+
   // Validate session on app launch
   useEffect(() => {
     const initAuth = async () => {
@@ -22,6 +36,7 @@ export const AuthProvider = ({ children }) => {
         const data = await authApi.getMe();
         if (data.user) {
           setUser(data.user);
+          syncUserPreferences(data.user);
         } else {
           setStoredToken(null);
           setToken(null);
@@ -50,6 +65,7 @@ export const AuthProvider = ({ children }) => {
       setStoredToken(res.token);
       setToken(res.token);
       setUser(res.user);
+      syncUserPreferences(res.user);
       return res.user;
     } catch (err) {
       setAuthError(err.message || 'Login failed');
@@ -67,6 +83,7 @@ export const AuthProvider = ({ children }) => {
       setStoredToken(res.token);
       setToken(res.token);
       setUser(res.user);
+      syncUserPreferences(res.user);
       return res.user;
     } catch (err) {
       setAuthError(err.message || 'Registration failed');
@@ -91,6 +108,7 @@ export const AuthProvider = ({ children }) => {
       const res = await authApi.updateProfile(fields);
       if (res.user) {
         setUser(res.user);
+        syncUserPreferences(res.user);
       }
       return res.user;
     } catch (err) {

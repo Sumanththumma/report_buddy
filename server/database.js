@@ -38,6 +38,8 @@ export const initDatabase = () => {
       gstin TEXT,
       currency TEXT DEFAULT '₹',
       gemini_api_key TEXT,
+      gemini_preferred_model TEXT DEFAULT 'gemini-2.0-flash',
+      dark_mode INTEGER DEFAULT 1,
       role TEXT DEFAULT 'owner',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -121,6 +123,8 @@ export const initDatabase = () => {
   addColumnIfNotExists('users', 'phone', "TEXT");
   addColumnIfNotExists('users', 'address', "TEXT");
   addColumnIfNotExists('users', 'receipt_footer', "TEXT DEFAULT 'Thank you for shopping with us! Please visit again.'");
+  addColumnIfNotExists('users', 'gemini_preferred_model', "TEXT DEFAULT 'gemini-2.0-flash'");
+  addColumnIfNotExists('users', 'dark_mode', "INTEGER DEFAULT 1");
 
   console.log('✅ SQLite database schema & personalization columns verified at:', dbPath);
 };

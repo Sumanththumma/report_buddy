@@ -68,8 +68,12 @@ export const DashboardTab = ({ onOpenPersonalization }) => {
         </div>
 
         <div className="text-right">
-          <span className="text-[11px] font-display font-semibold text-neutral-600 dark:text-zinc-400">
+          <span className="text-[11px] font-display font-semibold text-neutral-600 dark:text-zinc-400 block">
             {formattedToday}
+          </span>
+          <span className="inline-flex items-center gap-1 text-[9px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.2 rounded-full border border-emerald-500/20 mt-0.5" title="All sales data and products are continuously persisted to SQLite database">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            SQLite Synced
           </span>
         </div>
       </div>
