@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import db, { initDatabase } from './database.js';
+import * as dbAdapter from './dbAdapter.js';
 import { generateToken, requireAuth, requireRole } from './middleware/auth.js';
 
 dotenv.config();
@@ -196,7 +197,7 @@ const CATEGORY_STARTER_PRODUCTS = {
 };
 
 // Register a new retail shop with personalization
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   try {
     const { 
       email, 
@@ -219,7 +220,7 @@ app.post('/api/auth/register', (req, res) => {
       return res.status(400).json({ error: 'Email, password, and shop name are required.' });
     }
 
-    const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email.trim().toLowerCase());
+    const existingUser = await dbAdapter.getUserByEmail(email);
     if (existingUser) {
       return res.status(400).json({ error: 'An account with this email already exists.' });
     }
@@ -227,61 +228,42 @@ app.post('/api/auth/register', (req, res) => {
     const userId = `user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const passwordHash = bcrypt.hashSync(password, 10);
 
-    db.prepare(`
-      INSERT INTO users (
-        id, email, password_hash, shop_name, owner_name, 
-        store_category, tagline, logo_icon, theme_color,
-        phone, address, receipt_footer, gstin, currency, role
-      )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      userId,
-      email.trim().toLowerCase(),
-      passwordHash,
-      shopName.trim(),
-      ownerName ? ownerName.trim() : null,
-      storeCategory || 'General Retail',
-      tagline ? tagline.trim() : 'Your neighborhood retail shop',
-      logoIcon || 'Store',
-      themeColor || 'indigo',
-      phone ? phone.trim() : null,
-      address ? address.trim() : null,
-      receiptFooter ? receiptFooter.trim() : 'Thank you for shopping with us! Please visit again.',
-      gstin ? gstin.trim() : null,
-      currency || '₹',
-      'owner'
-    );
+    const newUser = await dbAdapter.createUser({
+      id: userId,
+      email: email.trim().toLowerCase(),
+      password_hash: passwordHash,
+      shop_name: shopName.trim(),
+      owner_name: ownerName ? ownerName.trim() : null,
+      store_category: storeCategory || 'General Retail',
+      tagline: tagline ? tagline.trim() : 'Your neighborhood retail shop',
+      logo_icon: logoIcon || 'Store',
+      theme_color: themeColor || 'indigo',
+      phone: phone ? phone.trim() : null,
+      address: address ? address.trim() : null,
+      receipt_footer: receiptFooter ? receiptFooter.trim() : 'Thank you for shopping with us! Please visit again.',
+      gstin: gstin ? gstin.trim() : null,
+      currency: currency || '₹',
+      role: 'owner'
+    });
 
     // Auto-seed industry-specific starter products if requested
     if (seedStarterProducts) {
       const starterList = CATEGORY_STARTER_PRODUCTS[storeCategory] || CATEGORY_STARTER_PRODUCTS['General Retail'];
-      const insertProd = db.prepare(`
-        INSERT INTO products (id, user_id, name, hsn_code, price, cost_price, tax_rate, unit, category, stock)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `);
-
       for (const p of starterList) {
-        insertProd.run(
-          `prod-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        await dbAdapter.createProduct({
+          id: `prod-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
           userId,
-          p.name,
-          p.hsn,
-          p.price,
-          p.cost,
-          p.tax,
-          p.unit,
-          p.cat,
-          p.stock
-        );
+          name: p.name,
+          hsnCode: p.hsn,
+          price: p.price,
+          costPrice: p.cost,
+          taxRate: p.tax,
+          unit: p.unit,
+          category: p.cat,
+          stock: p.stock
+        });
       }
     }
-
-    const newUser = db.prepare(`
-      SELECT id, email, shop_name, owner_name, store_category, tagline,
-             logo_icon, theme_color, phone, address, receipt_footer,
-             gstin, currency, role, gemini_api_key, gemini_preferred_model, dark_mode, created_at
-      FROM users WHERE id = ?
-    `).get(userId);
 
     const token = generateToken(newUser);
 
@@ -297,7 +279,7 @@ app.post('/api/auth/register', (req, res) => {
 });
 
 // Login
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -305,7 +287,7 @@ app.post('/api/auth/login', (req, res) => {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
 
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email.trim().toLowerCase());
+    const user = await dbAdapter.getUserByEmail(email);
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
@@ -330,23 +312,20 @@ app.post('/api/auth/login', (req, res) => {
 });
 
 // Get current authenticated user profile with personalization
-app.get('/api/auth/me', requireAuth, (req, res) => {
-  const user = db.prepare(`
-    SELECT id, email, shop_name, owner_name, store_category, tagline,
-           logo_icon, theme_color, phone, address, receipt_footer,
-           gstin, currency, role, gemini_api_key, gemini_preferred_model, dark_mode, created_at
-    FROM users WHERE id = ?
-  `).get(req.user.id);
-
-  if (!user) {
-    return res.status(404).json({ error: 'User not found.' });
+app.get('/api/auth/me', requireAuth, async (req, res) => {
+  try {
+    const user = await dbAdapter.getUserById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+    res.json({ user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-
-  res.json({ user });
 });
 
 // Update shop profile & personalization settings
-app.put('/api/auth/profile', requireAuth, (req, res) => {
+app.put('/api/auth/profile', requireAuth, async (req, res) => {
   try {
     const { 
       shopName, 
@@ -365,47 +344,22 @@ app.put('/api/auth/profile', requireAuth, (req, res) => {
       darkMode
     } = req.body;
 
-    db.prepare(`
-      UPDATE users
-      SET shop_name = COALESCE(?, shop_name),
-          owner_name = COALESCE(?, owner_name),
-          store_category = COALESCE(?, store_category),
-          tagline = COALESCE(?, tagline),
-          logo_icon = COALESCE(?, logo_icon),
-          theme_color = COALESCE(?, theme_color),
-          phone = COALESCE(?, phone),
-          address = COALESCE(?, address),
-          receipt_footer = COALESCE(?, receipt_footer),
-          gstin = COALESCE(?, gstin),
-          currency = COALESCE(?, currency),
-          gemini_api_key = COALESCE(?, gemini_api_key),
-          gemini_preferred_model = COALESCE(?, gemini_preferred_model),
-          dark_mode = COALESCE(?, dark_mode)
-      WHERE id = ?
-    `).run(
-      shopName || null,
-      ownerName || null,
-      storeCategory || null,
-      tagline || null,
-      logoIcon || null,
-      themeColor || null,
-      phone || null,
-      address || null,
-      receiptFooter || null,
-      gstin || null,
-      currency || null,
-      geminiApiKey !== undefined ? geminiApiKey : null,
-      geminiPreferredModel !== undefined ? geminiPreferredModel : null,
-      darkMode !== undefined ? (darkMode ? 1 : 0) : null,
-      req.user.id
-    );
-
-    const updatedUser = db.prepare(`
-      SELECT id, email, shop_name, owner_name, store_category, tagline,
-             logo_icon, theme_color, phone, address, receipt_footer,
-             gstin, currency, role, gemini_api_key, gemini_preferred_model, dark_mode, created_at
-      FROM users WHERE id = ?
-    `).get(req.user.id);
+    const updatedUser = await dbAdapter.updateUserProfile(req.user.id, {
+      shop_name: shopName || null,
+      owner_name: ownerName || null,
+      store_category: storeCategory || null,
+      tagline: tagline || null,
+      logo_icon: logoIcon || null,
+      theme_color: themeColor || null,
+      phone: phone || null,
+      address: address || null,
+      receipt_footer: receiptFooter || null,
+      gstin: gstin || null,
+      currency: currency || null,
+      gemini_api_key: geminiApiKey !== undefined ? geminiApiKey : null,
+      gemini_preferred_model: geminiPreferredModel !== undefined ? geminiPreferredModel : null,
+      dark_mode: darkMode !== undefined ? (darkMode ? 1 : 0) : null
+    });
 
     res.json({ message: 'Store profile & personalization updated successfully', user: updatedUser });
   } catch (err) {
@@ -418,16 +372,9 @@ app.put('/api/auth/profile', requireAuth, (req, res) => {
 // -------------------------------------------------------------
 
 // Get products for logged-in shop
-app.get('/api/products', requireAuth, (req, res) => {
+app.get('/api/products', requireAuth, async (req, res) => {
   try {
-    const products = db.prepare(`
-      SELECT id, name, hsn_code as hsnCode, price, cost_price as costPrice,
-             tax_rate as taxRate, unit, category, stock, updated_at as updatedAt
-      FROM products
-      WHERE user_id = ?
-      ORDER BY updated_at DESC
-    `).all(req.user.id);
-
+    const products = await dbAdapter.getProducts(req.user.id);
     res.json({ products });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch products: ' + err.message });
@@ -435,7 +382,7 @@ app.get('/api/products', requireAuth, (req, res) => {
 });
 
 // Add new product
-app.post('/api/products', requireAuth, (req, res) => {
+app.post('/api/products', requireAuth, async (req, res) => {
   try {
     const { name, hsnCode, price, costPrice, taxRate, unit, category, stock } = req.body;
 
@@ -444,28 +391,18 @@ app.post('/api/products', requireAuth, (req, res) => {
     }
 
     const prodId = `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-
-    db.prepare(`
-      INSERT INTO products (id, user_id, name, hsn_code, price, cost_price, tax_rate, unit, category, stock)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      prodId,
-      req.user.id,
-      name.trim(),
-      hsnCode ? hsnCode.trim() : '999999',
-      parseFloat(price) || 0,
-      parseFloat(costPrice) || 0,
-      parseFloat(taxRate) || 18,
-      unit || 'pcs',
-      category || 'General',
-      parseInt(stock) || 0
-    );
-
-    const created = db.prepare(`
-      SELECT id, name, hsn_code as hsnCode, price, cost_price as costPrice,
-             tax_rate as taxRate, unit, category, stock, updated_at as updatedAt
-      FROM products WHERE id = ?
-    `).get(prodId);
+    const created = await dbAdapter.createProduct({
+      id: prodId,
+      userId: req.user.id,
+      name: name.trim(),
+      hsnCode: hsnCode ? hsnCode.trim() : '999999',
+      price: parseFloat(price) || 0,
+      costPrice: parseFloat(costPrice) || 0,
+      taxRate: parseFloat(taxRate) || 18,
+      unit: unit || 'pcs',
+      category: category || 'General',
+      stock: parseInt(stock) || 0
+    });
 
     res.status(201).json({ product: created });
   } catch (err) {
@@ -474,46 +411,21 @@ app.post('/api/products', requireAuth, (req, res) => {
 });
 
 // Update product
-app.put('/api/products/:id', requireAuth, (req, res) => {
+app.put('/api/products/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, hsnCode, price, costPrice, taxRate, unit, category, stock } = req.body;
 
-    const existing = db.prepare('SELECT id FROM products WHERE id = ? AND user_id = ?').get(id, req.user.id);
-    if (!existing) {
-      return res.status(404).json({ error: 'Product not found or unauthorized.' });
-    }
-
-    db.prepare(`
-      UPDATE products
-      SET name = COALESCE(?, name),
-          hsn_code = COALESCE(?, hsn_code),
-          price = COALESCE(?, price),
-          cost_price = COALESCE(?, cost_price),
-          tax_rate = COALESCE(?, tax_rate),
-          unit = COALESCE(?, unit),
-          category = COALESCE(?, category),
-          stock = COALESCE(?, stock),
-          updated_at = CURRENT_TIMESTAMP
-      WHERE id = ? AND user_id = ?
-    `).run(
+    const updated = await dbAdapter.updateProduct(id, req.user.id, {
       name,
       hsnCode,
-      price !== undefined ? parseFloat(price) : null,
-      costPrice !== undefined ? parseFloat(costPrice) : null,
-      taxRate !== undefined ? parseFloat(taxRate) : null,
+      price: price !== undefined ? parseFloat(price) : undefined,
+      costPrice: costPrice !== undefined ? parseFloat(costPrice) : undefined,
+      taxRate: taxRate !== undefined ? parseFloat(taxRate) : undefined,
       unit,
       category,
-      stock !== undefined ? parseInt(stock) : null,
-      id,
-      req.user.id
-    );
-
-    const updated = db.prepare(`
-      SELECT id, name, hsn_code as hsnCode, price, cost_price as costPrice,
-             tax_rate as taxRate, unit, category, stock, updated_at as updatedAt
-      FROM products WHERE id = ?
-    `).get(id);
+      stock: stock !== undefined ? parseInt(stock) : undefined
+    });
 
     res.json({ product: updated });
   } catch (err) {
@@ -522,13 +434,10 @@ app.put('/api/products/:id', requireAuth, (req, res) => {
 });
 
 // Delete product
-app.delete('/api/products/:id', requireAuth, (req, res) => {
+app.delete('/api/products/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const result = db.prepare('DELETE FROM products WHERE id = ? AND user_id = ?').run(id, req.user.id);
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Product not found or unauthorized.' });
-    }
+    await dbAdapter.deleteProduct(id, req.user.id);
     res.json({ message: 'Product deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete product: ' + err.message });
@@ -540,190 +449,41 @@ app.delete('/api/products/:id', requireAuth, (req, res) => {
 // -------------------------------------------------------------
 
 // Get all Z-reports for user (optional filter ?month=YYYY-MM)
-app.get('/api/z-reports', requireAuth, (req, res) => {
+app.get('/api/z-reports', requireAuth, async (req, res) => {
   try {
     const { month } = req.query;
-
-    let query = `
-      SELECT id, date, report_number as reportNumber, closing_time as closingTime,
-             store_name as storeName, register_id as registerId,
-             gross_sales as grossSales, net_sales as netSales, discount, tax_total as taxTotal,
-             total_items_sold as totalItemsSold,
-             payment_cash as cash, payment_upi as upi, payment_card as card,
-             created_at as uploadedAt
-      FROM z_reports
-      WHERE user_id = ?
-    `;
-    const params = [req.user.id];
-
-    if (month) {
-      query += ` AND date LIKE ?`;
-      params.push(`${month}%`);
-    }
-
-    query += ` ORDER BY date DESC`;
-
-    const reports = db.prepare(query).all(...params);
-
-    // Format each report with its items and paymentBreakdown object
-    const getItems = db.prepare(`
-      SELECT product_name as productName, hsn_code as hsnCode, quantity,
-             unit, unit_price as unitPrice, line_total as lineTotal, tax_rate as taxRate
-      FROM z_report_items
-      WHERE z_report_id = ?
-    `);
-
-    const formatted = reports.map(r => ({
-      ...r,
-      paymentBreakdown: { cash: r.cash, upi: r.upi, card: r.card },
-      items: getItems.all(r.id)
-    }));
-
-    res.json({ zReports: formatted });
+    const reports = await dbAdapter.getZReports(req.user.id, month);
+    res.json({ zReports: reports });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch Z-reports: ' + err.message });
   }
 });
 
 // Get Z-report by date
-app.get('/api/z-reports/:date', requireAuth, (req, res) => {
+app.get('/api/z-reports/:date', requireAuth, async (req, res) => {
   try {
     const { date } = req.params;
-
-    const report = db.prepare(`
-      SELECT id, date, report_number as reportNumber, closing_time as closingTime,
-             store_name as storeName, register_id as registerId,
-             gross_sales as grossSales, net_sales as netSales, discount, tax_total as taxTotal,
-             total_items_sold as totalItemsSold,
-             payment_cash as cash, payment_upi as upi, payment_card as card,
-             created_at as uploadedAt
-      FROM z_reports
-      WHERE user_id = ? AND date = ?
-    `).get(req.user.id, date);
-
+    const report = await dbAdapter.getZReportByDate(req.user.id, date);
     if (!report) {
       return res.status(404).json({ report: null });
     }
-
-    const items = db.prepare(`
-      SELECT product_name as productName, hsn_code as hsnCode, quantity,
-             unit, unit_price as unitPrice, line_total as lineTotal, tax_rate as taxRate
-      FROM z_report_items
-      WHERE z_report_id = ?
-    `).all(report.id);
-
-    res.json({
-      report: {
-        ...report,
-        paymentBreakdown: { cash: report.cash, upi: report.upi, card: report.card },
-        items
-      }
-    });
+    res.json({ report });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch report: ' + err.message });
   }
 });
 
 // Save or Update Z-Report (with itemized breakdown)
-app.post('/api/z-reports', requireAuth, (req, res) => {
-  const transaction = db.transaction((reportData) => {
-    const reportDate = reportData.date || new Date().toISOString().split('T')[0];
-    const reportId = reportData.id || `z-${reportDate}-${Date.now().toString().slice(-4)}`;
-    const pay = reportData.paymentBreakdown || {};
-
-    const totalUnits = reportData.totalItemsSold ||
-      (reportData.items?.reduce((acc, i) => acc + (parseInt(i.quantity) || 1), 0) || 0);
-
-    // Delete existing Z-report for this date if overwriting
-    const existing = db.prepare('SELECT id FROM z_reports WHERE user_id = ? AND date = ?').get(req.user.id, reportDate);
-    if (existing) {
-      db.prepare('DELETE FROM z_report_items WHERE z_report_id = ?').run(existing.id);
-      db.prepare('DELETE FROM z_reports WHERE id = ?').run(existing.id);
-    }
-
-    // Insert new Z-report
-    db.prepare(`
-      INSERT INTO z_reports (
-        id, user_id, date, report_number, closing_time, store_name, register_id,
-        gross_sales, net_sales, discount, tax_total, total_items_sold,
-        payment_cash, payment_upi, payment_card
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      reportId,
-      req.user.id,
-      reportDate,
-      reportData.reportNumber || 'Z-Report',
-      reportData.closingTime || '21:30',
-      reportData.storeName || req.user.shop_name || 'Retail Store',
-      reportData.registerId || 'REG-01',
-      parseFloat(reportData.grossSales) || 0,
-      parseFloat(reportData.netSales) || 0,
-      parseFloat(reportData.discount) || 0,
-      parseFloat(reportData.taxTotal) || 0,
-      totalUnits,
-      parseFloat(pay.cash) || 0,
-      parseFloat(pay.upi) || 0,
-      parseFloat(pay.card) || 0
-    );
-
-    // Insert line items
-    const insertItem = db.prepare(`
-      INSERT INTO z_report_items (id, z_report_id, user_id, product_name, hsn_code, quantity, unit, unit_price, line_total, tax_rate)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    // Auto-catalog missing products
-    const findProd = db.prepare(`
-      SELECT id FROM products WHERE user_id = ? AND (LOWER(TRIM(name)) = LOWER(TRIM(?)) OR hsn_code = ?)
-    `);
-    const insertNewProd = db.prepare(`
-      INSERT INTO products (id, user_id, name, hsn_code, price, cost_price, tax_rate, unit, category, stock)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    if (reportData.items && Array.isArray(reportData.items)) {
-      for (const item of reportData.items) {
-        insertItem.run(
-          `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-          reportId,
-          req.user.id,
-          item.productName,
-          item.hsnCode || '999999',
-          parseInt(item.quantity) || 1,
-          item.unit || 'pcs',
-          parseFloat(item.unitPrice) || 0,
-          parseFloat(item.lineTotal) || 0,
-          parseFloat(item.taxRate) || 18
-        );
-
-        // Auto add to catalog if not present
-        const exists = findProd.get(req.user.id, item.productName, item.hsnCode);
-        if (!exists) {
-          insertNewProd.run(
-            `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-            req.user.id,
-            item.productName,
-            item.hsnCode || '999999',
-            parseFloat(item.unitPrice) || 0,
-            Math.round((parseFloat(item.unitPrice) || 0) * 0.7),
-            item.taxRate || 18,
-            item.unit || 'pcs',
-            'Scanned Items',
-            25
-          );
-        }
-      }
-    }
-
-    return {
-      id: reportId,
-      date: reportDate,
-      ...reportData
-    };
-  });
-
+app.post('/api/z-reports', requireAuth, async (req, res) => {
   try {
-    const saved = transaction(req.body);
+    const reportData = {
+      ...req.body,
+      userId: req.user.id,
+      id: req.body.id || `z-${req.body.date || new Date().toISOString().split('T')[0]}-${Date.now().toString().slice(-4)}`,
+      date: req.body.date || new Date().toISOString().split('T')[0],
+      storeName: req.body.storeName || req.user.shop_name || 'Retail Store'
+    };
+    const saved = await dbAdapter.createZReport(reportData, req.body.items || []);
     res.status(201).json({ message: 'Z-Report stored successfully in database', report: saved });
   } catch (err) {
     console.error('Error saving Z-Report:', err);
@@ -732,13 +492,10 @@ app.post('/api/z-reports', requireAuth, (req, res) => {
 });
 
 // Delete Z-Report
-app.delete('/api/z-reports/:id', requireAuth, (req, res) => {
+app.delete('/api/z-reports/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    const result = db.prepare('DELETE FROM z_reports WHERE id = ? AND user_id = ?').run(id, req.user.id);
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Report not found or unauthorized.' });
-    }
+    await dbAdapter.deleteZReport(id, req.user.id);
     res.json({ message: 'Z-Report deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete report: ' + err.message });
@@ -750,53 +507,9 @@ app.delete('/api/z-reports/:id', requireAuth, (req, res) => {
 // -------------------------------------------------------------
 
 // Export complete shop data as portable JSON backup
-app.get('/api/backup/export', requireAuth, (req, res) => {
+app.get('/api/backup/export', requireAuth, async (req, res) => {
   try {
-    const user = db.prepare(`
-      SELECT id, email, shop_name, owner_name, store_category, tagline,
-             logo_icon, theme_color, phone, address, receipt_footer,
-             gstin, currency, role, gemini_api_key, gemini_preferred_model, dark_mode, created_at
-      FROM users WHERE id = ?
-    `).get(req.user.id);
-
-    const products = db.prepare(`
-      SELECT id, name, hsn_code as hsnCode, price, cost_price as costPrice,
-             tax_rate as taxRate, unit, category, stock, updated_at as updatedAt
-      FROM products WHERE user_id = ?
-    `).all(req.user.id);
-
-    const reports = db.prepare(`
-      SELECT id, date, report_number as reportNumber, closing_time as closingTime,
-             store_name as storeName, register_id as registerId,
-             gross_sales as grossSales, net_sales as netSales, discount, tax_total as taxTotal,
-             total_items_sold as totalItemsSold,
-             payment_cash as cash, payment_upi as upi, payment_card as card,
-             created_at as uploadedAt
-      FROM z_reports WHERE user_id = ?
-      ORDER BY date DESC
-    `).all(req.user.id);
-
-    const getItems = db.prepare(`
-      SELECT product_name as productName, hsn_code as hsnCode, quantity,
-             unit, unit_price as unitPrice, line_total as lineTotal, tax_rate as taxRate
-      FROM z_report_items WHERE z_report_id = ?
-    `);
-
-    const formattedReports = reports.map(r => ({
-      ...r,
-      paymentBreakdown: { cash: r.cash, upi: r.upi, card: r.card },
-      items: getItems.all(r.id)
-    }));
-
-    const exportData = {
-      app: 'RetailKhata',
-      version: '2.0.0',
-      exportedAt: new Date().toISOString(),
-      user,
-      products,
-      zReports: formattedReports
-    };
-
+    const exportData = await dbAdapter.exportBackupData(req.user.id);
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Content-Disposition', `attachment; filename=retailkhata_backup_${new Date().toISOString().split('T')[0]}.json`);
     res.json(exportData);
@@ -807,166 +520,13 @@ app.get('/api/backup/export', requireAuth, (req, res) => {
 });
 
 // Import and restore shop data from backup JSON file
-app.post('/api/backup/import', requireAuth, (req, res) => {
+app.post('/api/backup/import', requireAuth, async (req, res) => {
   try {
     const backupData = req.body;
     if (!backupData || (!backupData.products && !backupData.zReports)) {
       return res.status(400).json({ error: 'Invalid backup file format.' });
     }
-
-    const transaction = db.transaction(() => {
-      let importedProducts = 0;
-      let importedReports = 0;
-
-      // 1. Optionally restore profile fields if provided
-      if (backupData.user) {
-        const u = backupData.user;
-        db.prepare(`
-          UPDATE users
-          SET shop_name = COALESCE(?, shop_name),
-              owner_name = COALESCE(?, owner_name),
-              store_category = COALESCE(?, store_category),
-              tagline = COALESCE(?, tagline),
-              logo_icon = COALESCE(?, logo_icon),
-              theme_color = COALESCE(?, theme_color),
-              phone = COALESCE(?, phone),
-              address = COALESCE(?, address),
-              receipt_footer = COALESCE(?, receipt_footer),
-              gstin = COALESCE(?, gstin),
-              currency = COALESCE(?, currency),
-              gemini_api_key = COALESCE(?, gemini_api_key),
-              gemini_preferred_model = COALESCE(?, gemini_preferred_model)
-          WHERE id = ?
-        `).run(
-          u.shop_name || u.shopName || null,
-          u.owner_name || u.ownerName || null,
-          u.store_category || u.storeCategory || null,
-          u.tagline || null,
-          u.logo_icon || u.logoIcon || null,
-          u.theme_color || u.themeColor || null,
-          u.phone || null,
-          u.address || null,
-          u.receipt_footer || u.receiptFooter || null,
-          u.gstin || null,
-          u.currency || null,
-          u.gemini_api_key || u.geminiApiKey || null,
-          u.gemini_preferred_model || u.geminiPreferredModel || null,
-          req.user.id
-        );
-      }
-
-      // 2. Import Products (upsert by name)
-      if (Array.isArray(backupData.products)) {
-        const insertProd = db.prepare(`
-          INSERT INTO products (id, user_id, name, hsn_code, price, cost_price, tax_rate, unit, category, stock)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-        const updateProd = db.prepare(`
-          UPDATE products
-          SET hsn_code = ?, price = ?, cost_price = ?, tax_rate = ?, unit = ?, category = ?, stock = ?
-          WHERE id = ? AND user_id = ?
-        `);
-
-        for (const p of backupData.products) {
-          const existing = db.prepare('SELECT id FROM products WHERE user_id = ? AND LOWER(name) = ?')
-                             .get(req.user.id, (p.name || '').toLowerCase().trim());
-          if (existing) {
-            updateProd.run(
-              p.hsnCode || p.hsn_code || '999999',
-              parseFloat(p.price) || 0,
-              parseFloat(p.costPrice || p.cost_price) || 0,
-              parseFloat(p.taxRate || p.tax_rate) || 18,
-              p.unit || 'pcs',
-              p.category || 'General',
-              parseInt(p.stock) || 0,
-              existing.id,
-              req.user.id
-            );
-          } else {
-            const prodId = p.id || `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-            insertProd.run(
-              prodId,
-              req.user.id,
-              (p.name || 'Unnamed Product').trim(),
-              p.hsnCode || p.hsn_code || '999999',
-              parseFloat(p.price) || 0,
-              parseFloat(p.costPrice || p.cost_price) || 0,
-              parseFloat(p.taxRate || p.tax_rate) || 18,
-              p.unit || 'pcs',
-              p.category || 'General',
-              parseInt(p.stock) || 0
-            );
-          }
-          importedProducts++;
-        }
-      }
-
-      // 3. Import Z-Reports (upsert by date)
-      if (Array.isArray(backupData.zReports)) {
-        for (const r of backupData.zReports) {
-          const reportDate = r.date || new Date().toISOString().split('T')[0];
-          const reportId = r.id || `z-${reportDate}-${Date.now().toString().slice(-4)}`;
-          const pay = r.paymentBreakdown || {};
-
-          // Clean existing report for this date
-          const existingReport = db.prepare('SELECT id FROM z_reports WHERE user_id = ? AND date = ?').get(req.user.id, reportDate);
-          if (existingReport) {
-            db.prepare('DELETE FROM z_report_items WHERE z_report_id = ?').run(existingReport.id);
-            db.prepare('DELETE FROM z_reports WHERE id = ?').run(existingReport.id);
-          }
-
-          db.prepare(`
-            INSERT INTO z_reports (
-              id, user_id, date, report_number, closing_time, store_name, register_id,
-              gross_sales, net_sales, discount, tax_total, total_items_sold,
-              payment_cash, payment_upi, payment_card
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(
-            reportId,
-            req.user.id,
-            reportDate,
-            r.reportNumber || 'Z-Report',
-            r.closingTime || '21:30',
-            r.storeName || 'Retail Store',
-            r.registerId || 'REG-01',
-            parseFloat(r.grossSales) || 0,
-            parseFloat(r.netSales) || 0,
-            parseFloat(r.discount) || 0,
-            parseFloat(r.taxTotal) || 0,
-            parseInt(r.totalItemsSold) || (r.items?.length || 0),
-            parseFloat(pay.cash ?? r.cash) || 0,
-            parseFloat(pay.upi ?? r.upi) || 0,
-            parseFloat(pay.card ?? r.card) || 0
-          );
-
-          if (Array.isArray(r.items)) {
-            const insertItem = db.prepare(`
-              INSERT INTO z_report_items (id, z_report_id, user_id, product_name, hsn_code, quantity, unit, unit_price, line_total, tax_rate)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `);
-            for (const item of r.items) {
-              insertItem.run(
-                `item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-                reportId,
-                req.user.id,
-                item.productName || item.name || 'Item',
-                item.hsnCode || '999999',
-                parseInt(item.quantity) || 1,
-                item.unit || 'pcs',
-                parseFloat(item.unitPrice || item.price) || 0,
-                parseFloat(item.lineTotal || item.total) || 0,
-                parseFloat(item.taxRate) || 18
-              );
-            }
-          }
-          importedReports++;
-        }
-      }
-
-      return { importedProducts, importedReports };
-    });
-
-    const result = transaction();
+    const result = await dbAdapter.importBackupData(req.user.id, backupData);
     res.json({
       message: 'Shop data restored successfully from backup!',
       ...result
@@ -978,136 +538,13 @@ app.post('/api/backup/import', requireAuth, (req, res) => {
 });
 
 // Bulk sync local cache to remote database
-app.post('/api/sync/bulk', requireAuth, (req, res) => {
+app.post('/api/sync/bulk', requireAuth, async (req, res) => {
   try {
     const { products = [], zReports = [] } = req.body;
-
-    const transaction = db.transaction(() => {
-      let addedProducts = 0;
-      let addedReports = 0;
-
-      // Sync Products
-      if (Array.isArray(products) && products.length > 0) {
-        const insertProd = db.prepare(`
-          INSERT INTO products (id, user_id, name, hsn_code, price, cost_price, tax_rate, unit, category, stock)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-
-        for (const p of products) {
-          const exists = db.prepare('SELECT id FROM products WHERE user_id = ? AND LOWER(name) = ?')
-                           .get(req.user.id, (p.name || '').toLowerCase().trim());
-          if (!exists && p.name) {
-            insertProd.run(
-              p.id || `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-              req.user.id,
-              p.name.trim(),
-              p.hsnCode || '999999',
-              parseFloat(p.price) || 0,
-              parseFloat(p.costPrice) || 0,
-              parseFloat(p.taxRate) || 18,
-              p.unit || 'pcs',
-              p.category || 'General',
-              parseInt(p.stock) || 0
-            );
-            addedProducts++;
-          }
-        }
-      }
-
-      // Sync Z-Reports
-      if (Array.isArray(zReports) && zReports.length > 0) {
-        for (const r of zReports) {
-          const exists = db.prepare('SELECT id FROM z_reports WHERE user_id = ? AND date = ?').get(req.user.id, r.date);
-          if (!exists && r.date) {
-            const reportId = r.id || `z-${r.date}-${Date.now().toString().slice(-4)}`;
-            const pay = r.paymentBreakdown || {};
-
-            db.prepare(`
-              INSERT INTO z_reports (
-                id, user_id, date, report_number, closing_time, store_name, register_id,
-                gross_sales, net_sales, discount, tax_total, total_items_sold,
-                payment_cash, payment_upi, payment_card
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(
-              reportId,
-              req.user.id,
-              r.date,
-              r.reportNumber || 'Z-Report',
-              r.closingTime || '21:30',
-              r.storeName || 'Retail Store',
-              r.registerId || 'REG-01',
-              parseFloat(r.grossSales) || 0,
-              parseFloat(r.netSales) || 0,
-              parseFloat(r.discount) || 0,
-              parseFloat(r.taxTotal) || 0,
-              parseInt(r.totalItemsSold) || (r.items?.length || 0),
-              parseFloat(pay.cash ?? r.cash) || 0,
-              parseFloat(pay.upi ?? r.upi) || 0,
-              parseFloat(pay.card ?? r.card) || 0
-            );
-
-            if (Array.isArray(r.items)) {
-              const insertItem = db.prepare(`
-                INSERT INTO z_report_items (id, z_report_id, user_id, product_name, hsn_code, quantity, unit, unit_price, line_total, tax_rate)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-              `);
-              for (const item of r.items) {
-                insertItem.run(
-                  `item-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-                  reportId,
-                  req.user.id,
-                  item.productName || item.name || 'Item',
-                  item.hsnCode || '999999',
-                  parseInt(item.quantity) || 1,
-                  item.unit || 'pcs',
-                  parseFloat(item.unitPrice || item.price) || 0,
-                  parseFloat(item.lineTotal || item.total) || 0,
-                  parseFloat(item.taxRate) || 18
-                );
-              }
-            }
-            addedReports++;
-          }
-        }
-      }
-
-      return { addedProducts, addedReports };
-    });
-
-    const stats = transaction();
-
-    // Fetch the fresh combined dataset from SQLite
-    const updatedProducts = db.prepare(`
-      SELECT id, name, hsn_code as hsnCode, price, cost_price as costPrice,
-             tax_rate as taxRate, unit, category, stock, updated_at as updatedAt
-      FROM products WHERE user_id = ? ORDER BY updated_at DESC
-    `).all(req.user.id);
-
-    const getItems = db.prepare(`
-      SELECT product_name as productName, hsn_code as hsnCode, quantity,
-             unit, unit_price as unitPrice, line_total as lineTotal, tax_rate as taxRate
-      FROM z_report_items WHERE z_report_id = ?
-    `);
-
-    const updatedReports = db.prepare(`
-      SELECT id, date, report_number as reportNumber, closing_time as closingTime,
-             store_name as storeName, register_id as registerId,
-             gross_sales as grossSales, net_sales as netSales, discount, tax_total as taxTotal,
-             total_items_sold as totalItemsSold,
-             payment_cash as cash, payment_upi as upi, payment_card as card,
-             created_at as uploadedAt
-      FROM z_reports WHERE user_id = ? ORDER BY date DESC
-    `).all(req.user.id).map(r => ({
-      ...r,
-      paymentBreakdown: { cash: r.cash, upi: r.upi, card: r.card },
-      items: getItems.all(r.id)
-    }));
-
+    const result = await dbAdapter.bulkSync(req.user.id, products, zReports);
     res.json({
-      message: 'Synced with SQLite database successfully',
-      stats,
-      products: updatedProducts,
-      zReports: updatedReports
+      message: 'Synced with database successfully',
+      ...result
     });
   } catch (err) {
     console.error('Sync error:', err);
@@ -1116,20 +553,10 @@ app.post('/api/sync/bulk', requireAuth, (req, res) => {
 });
 
 // Database status & persistence info
-app.get('/api/backup/status', requireAuth, (req, res) => {
+app.get('/api/backup/status', requireAuth, async (req, res) => {
   try {
-    const prodCount = db.prepare('SELECT COUNT(*) as count FROM products WHERE user_id = ?').get(req.user.id).count;
-    const repCount = db.prepare('SELECT COUNT(*) as count FROM z_reports WHERE user_id = ?').get(req.user.id).count;
-    const totalRev = db.prepare('SELECT SUM(net_sales) as total FROM z_reports WHERE user_id = ?').get(req.user.id).total || 0;
-
-    res.json({
-      persistent: true,
-      engine: 'SQLite WAL (Write-Ahead Logging)',
-      totalProducts: prodCount,
-      totalZReports: repCount,
-      totalRevenue: totalRev,
-      lastSynced: new Date().toISOString()
-    });
+    const status = await dbAdapter.getDatabaseStatus(req.user.id);
+    res.json(status);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
