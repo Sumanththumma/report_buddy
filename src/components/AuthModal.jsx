@@ -128,14 +128,14 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login' }) => {
                       ? 'Create Store (1/2)' 
                       : 'Branding & Themes (2/2)'}
                 </h2>
-                <p className="text-[10px] text-neutral-400 dark:text-zinc-500 font-sans">
+                <p className="text-[10px] text-neutral-600 dark:text-zinc-400 font-sans">
                   {mode === 'login' ? 'Private multi-tenant sales database' : 'Set up your retail business profile'}
                 </p>
               </div>
             </div>
             <button 
               onClick={onClose}
-              className="text-neutral-400 hover:text-neutral-600 dark:hover:text-zinc-300 p-1 rounded-lg transition-colors"
+              className="text-neutral-500 hover:text-neutral-800 dark:hover:text-zinc-200 p-1 rounded-lg transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -195,7 +195,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login' }) => {
                     placeholder="owner@yourstore.com"
                     className="w-full bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-xl px-3 py-2 pl-8 text-neutral-900 dark:text-zinc-100 outline-none focus:border-neutral-500 font-semibold"
                   />
-                  <Mail className="w-3.5 h-3.5 text-neutral-400 absolute left-2.5 top-2.5" />
+                  <Mail className="w-3.5 h-3.5 text-neutral-500 dark:text-zinc-400 absolute left-2.5 top-2.5" />
                 </div>
               </div>
 
@@ -212,7 +212,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login' }) => {
                     placeholder="••••••••"
                     className="w-full bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-xl px-3 py-2 pl-8 text-neutral-900 dark:text-zinc-100 outline-none focus:border-neutral-500 font-semibold"
                   />
-                  <Lock className="w-3.5 h-3.5 text-neutral-400 absolute left-2.5 top-2.5" />
+                  <Lock className="w-3.5 h-3.5 text-neutral-500 dark:text-zinc-400 absolute left-2.5 top-2.5" />
                 </div>
               </div>
 
@@ -256,7 +256,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login' }) => {
                       placeholder="e.g. Metro Fashion & Lifestyle"
                       className="w-full bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-xl px-3 py-2 pl-8 text-neutral-900 dark:text-zinc-100 outline-none focus:border-neutral-500 font-semibold text-xs"
                     />
-                    <Building className="w-3.5 h-3.5 text-neutral-400 absolute left-2.5 top-2.5" />
+                    <Building className="w-3.5 h-3.5 text-neutral-500 dark:text-zinc-400 absolute left-2.5 top-2.5" />
                   </div>
                 </div>
 
@@ -305,7 +305,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login' }) => {
                       placeholder="owner@yourstore.com"
                       className="w-full bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-xl px-3 py-2 pl-8 text-neutral-900 dark:text-zinc-100 outline-none focus:border-neutral-500 font-semibold text-xs"
                     />
-                    <Mail className="w-3.5 h-3.5 text-neutral-400 absolute left-2.5 top-2.5" />
+                    <Mail className="w-3.5 h-3.5 text-neutral-500 dark:text-zinc-400 absolute left-2.5 top-2.5" />
                   </div>
                 </div>
 
@@ -323,7 +323,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login' }) => {
                       placeholder="••••••••"
                       className="w-full bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-xl px-3 py-2 pl-8 text-neutral-900 dark:text-zinc-100 outline-none focus:border-neutral-500 font-semibold text-xs"
                     />
-                    <Lock className="w-3.5 h-3.5 text-neutral-400 absolute left-2.5 top-2.5" />
+                    <Lock className="w-3.5 h-3.5 text-neutral-500 dark:text-zinc-400 absolute left-2.5 top-2.5" />
                   </div>
                 </div>
 
@@ -438,7 +438,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login' }) => {
                       <PackagePlus className="w-3.5 h-3.5 text-neutral-600 dark:text-zinc-400" />
                       Pre-load starter products with HSN codes
                     </span>
-                    <span className="text-neutral-400 dark:text-zinc-500 block text-[10px]">
+                    <span className="text-neutral-600 dark:text-zinc-400 block text-[10px]">
                       Seeds 5 industry items tailored to {regData.storeCategory}.
                     </span>
                   </div>

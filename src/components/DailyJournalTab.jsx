@@ -80,7 +80,7 @@ export const DailyJournalTab = () => {
                 className="font-display text-xs font-bold text-neutral-900 dark:text-neutral-100 bg-transparent border-none outline-none cursor-pointer"
               />
             </div>
-            <p className="text-[11px] font-medium text-neutral-400 dark:text-zinc-500 mt-0.5">
+            <p className="text-[11px] font-medium text-neutral-600 dark:text-zinc-400 mt-0.5">
               {formattedDisplay} {isToday && <span className="text-neutral-900 dark:text-zinc-200 font-bold">(Today)</span>}
             </p>
           </div>
@@ -116,7 +116,7 @@ export const DailyJournalTab = () => {
                   : 'text-neutral-500 dark:text-zinc-400 hover:bg-neutral-50 dark:hover:bg-zinc-800/50'
               }`}
             >
-              <span className={`text-[8.5px] uppercase ${item.isSelected ? 'opacity-80' : 'text-neutral-400 dark:text-zinc-500'}`}>
+              <span className={`text-[8.5px] uppercase ${item.isSelected ? 'opacity-80' : 'text-neutral-600 dark:text-zinc-400'}`}>
                 {item.dayName}
               </span>
               <span className="font-display text-xs font-bold mt-0.5">
@@ -177,19 +177,19 @@ export const DailyJournalTab = () => {
           {currentReport.paymentBreakdown && (
             <div className="bg-white dark:bg-zinc-900 rounded-2xl p-3 border border-neutral-200/80 dark:border-zinc-800/80 grid grid-cols-3 gap-2 text-center text-xs">
               <div className="p-2 rounded-xl bg-neutral-50 dark:bg-zinc-800/60 border border-neutral-100 dark:border-zinc-700/60">
-                <span className="text-[9px] font-bold text-neutral-400 uppercase">Cash</span>
+                <span className="text-[9px] font-bold text-neutral-600 dark:text-zinc-400 uppercase">Cash</span>
                 <p className="font-display font-bold text-neutral-900 dark:text-zinc-100 mt-0.5">
                   {shopProfile.currency}{(currentReport.paymentBreakdown.cash || 0).toLocaleString()}
                 </p>
               </div>
               <div className="p-2 rounded-xl bg-neutral-50 dark:bg-zinc-800/60 border border-neutral-100 dark:border-zinc-700/60">
-                <span className="text-[9px] font-bold text-neutral-400 uppercase">UPI / QR</span>
+                <span className="text-[9px] font-bold text-neutral-600 dark:text-zinc-400 uppercase">UPI / QR</span>
                 <p className="font-display font-bold text-neutral-900 dark:text-zinc-100 mt-0.5">
                   {shopProfile.currency}{(currentReport.paymentBreakdown.upi || 0).toLocaleString()}
                 </p>
               </div>
               <div className="p-2 rounded-xl bg-neutral-50 dark:bg-zinc-800/60 border border-neutral-100 dark:border-zinc-700/60">
-                <span className="text-[9px] font-bold text-neutral-400 uppercase">Card (POS)</span>
+                <span className="text-[9px] font-bold text-neutral-600 dark:text-zinc-400 uppercase">Card (POS)</span>
                 <p className="font-display font-bold text-neutral-900 dark:text-zinc-100 mt-0.5">
                   {shopProfile.currency}{(currentReport.paymentBreakdown.card || 0).toLocaleString()}
                 </p>
@@ -204,7 +204,7 @@ export const DailyJournalTab = () => {
                 <h3 className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 tracking-tight">
                   Itemized Sales ({currentReport.items?.length || 0} Products)
                 </h3>
-                <p className="text-[10px] text-neutral-400 dark:text-zinc-500">Products sold on this date</p>
+                <p className="text-[10px] text-neutral-600 dark:text-zinc-400">Products sold on this date</p>
               </div>
               <button
                 onClick={() => window.print()}
@@ -228,7 +228,7 @@ export const DailyJournalTab = () => {
                         HSN: {item.hsnCode || 'N/A'}
                       </span>
                     </div>
-                    <div className="flex items-center space-x-2 text-[10px] text-neutral-400 dark:text-zinc-500 mt-0.5">
+                    <div className="flex items-center space-x-2 text-[10px] text-neutral-600 dark:text-zinc-400 mt-0.5">
                       <span className="font-medium text-neutral-700 dark:text-zinc-300">{item.quantity} {item.unit || 'pcs'} sold</span>
                       <span>•</span>
                       <span>Rate: {shopProfile.currency}{item.unitPrice}</span>
@@ -248,7 +248,7 @@ export const DailyJournalTab = () => {
 
             {/* Actions */}
             <div className="pt-2 flex items-center justify-between border-t border-neutral-100 dark:border-zinc-800/80 text-xs">
-              <span className="text-[10px] text-neutral-400 dark:text-zinc-500">
+              <span className="text-[10px] text-neutral-600 dark:text-zinc-400">
                 Logged: {new Date(currentReport.uploadedAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
               <button
@@ -268,7 +268,7 @@ export const DailyJournalTab = () => {
       ) : (
         /* Empty State */
         <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-neutral-200/80 dark:border-zinc-800/80 text-center space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-neutral-100 dark:bg-zinc-800 text-neutral-400 dark:text-zinc-400 flex items-center justify-center mx-auto">
+          <div className="w-12 h-12 rounded-2xl bg-neutral-100 dark:bg-zinc-800 text-neutral-500 dark:text-zinc-400 flex items-center justify-center mx-auto">
             <Calendar className="w-5 h-5 stroke-[1.8]" />
           </div>
 
@@ -276,7 +276,7 @@ export const DailyJournalTab = () => {
             <h3 className="font-display font-bold text-sm text-neutral-900 dark:text-neutral-100">
               No EOD Report for {formattedDisplay}
             </h3>
-            <p className="text-xs text-neutral-400 dark:text-zinc-500 mt-1 max-w-xs mx-auto">
+            <p className="text-xs text-neutral-600 dark:text-zinc-400 mt-1 max-w-xs mx-auto">
               Scan today's cash register Z-Report to automatically store itemized sales.
             </p>
           </div>

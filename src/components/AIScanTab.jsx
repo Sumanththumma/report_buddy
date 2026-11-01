@@ -111,10 +111,21 @@ export const AIScanTab = ({ onOpenSettings }) => {
       }
 
       setExtractedZReport(data);
-      showToast('Z-Report details extracted successfully');
+      if (data.isFallback) {
+        showToast('Extracted with built-in engine. Verify items and totals.');
+      } else {
+        showToast('Z-Report details extracted successfully');
+      }
     } catch (err) {
       console.error(err);
-      setScanError(err.message || 'Failed to extract Z-Report data.');
+      const isDeprecation = (err.message || '').includes('1.5-flash') || 
+                            (err.message || '').includes('not found') || 
+                            (err.message || '').includes('not supported');
+      if (isDeprecation) {
+        setScanError('Google Gemini: The older 1.5-flash model was retired by Google. We automatically use Gemini 2.0 Flash. Click below to parse with the built-in smart engine or test your key in Settings.');
+      } else {
+        setScanError(err.message || 'Failed to extract Z-Report data.');
+      }
     } finally {
       setIsScanning(false);
     }
@@ -216,7 +227,7 @@ export const AIScanTab = ({ onOpenSettings }) => {
       {!geminiApiKey && (
         <div className="p-3 bg-neutral-100 dark:bg-zinc-850 border border-neutral-200/80 dark:border-zinc-800 rounded-2xl flex items-center justify-between text-xs text-neutral-800 dark:text-zinc-200">
           <div className="flex items-center space-x-2">
-            <Key className="w-4 h-4 text-neutral-400 shrink-0" />
+            <Key className="w-4 h-4 text-neutral-500 dark:text-zinc-400 shrink-0" />
             <span className="text-[11px]">Configure free Gemini API key in Settings to scan receipts.</span>
           </div>
           <button
@@ -235,7 +246,7 @@ export const AIScanTab = ({ onOpenSettings }) => {
             <h3 className="font-display font-bold text-sm text-neutral-900 dark:text-neutral-100 tracking-tight">
               Scan End-of-Day Z-Report
             </h3>
-            <p className="text-xs text-neutral-400 dark:text-zinc-500 font-sans">
+            <p className="text-xs text-neutral-600 dark:text-zinc-400 font-sans">
               Extracts daily items, quantities, prices & GST HSN codes
             </p>
           </div>
@@ -298,7 +309,7 @@ export const AIScanTab = ({ onOpenSettings }) => {
                   <Camera className="w-5 h-5 stroke-[2]" />
                 </div>
                 <span className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 group-hover:text-rust-600 dark:group-hover:text-rust-400 transition-colors">Camera</span>
-                <span className="text-[10px] text-neutral-400 dark:text-zinc-500 mt-0.5">Snap paper bill</span>
+                <span className="text-[10px] text-neutral-600 dark:text-zinc-400 mt-0.5">Snap paper bill</span>
               </button>
 
               <button
@@ -310,7 +321,7 @@ export const AIScanTab = ({ onOpenSettings }) => {
                   <Upload className="w-5 h-5 stroke-[2]" />
                 </div>
                 <span className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100">Upload File</span>
-                <span className="text-[10px] text-neutral-400 dark:text-zinc-500 mt-0.5">Image or PDF</span>
+                <span className="text-[10px] text-neutral-600 dark:text-zinc-400 mt-0.5">Image or PDF</span>
               </button>
             </div>
           )}

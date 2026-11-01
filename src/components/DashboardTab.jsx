@@ -68,7 +68,7 @@ export const DashboardTab = ({ onOpenPersonalization }) => {
         </div>
 
         <div className="text-right">
-          <span className="text-[11px] font-display font-semibold text-neutral-400 dark:text-zinc-500">
+          <span className="text-[11px] font-display font-semibold text-neutral-600 dark:text-zinc-400">
             {formattedToday}
           </span>
         </div>
@@ -168,7 +168,7 @@ export const DashboardTab = ({ onOpenPersonalization }) => {
           <span className="block font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 mt-2">
             Daily Journal
           </span>
-          <span className="text-[10px] text-neutral-400 dark:text-zinc-500">
+          <span className="text-[10px] text-neutral-600 dark:text-zinc-400">
             Browse by date
           </span>
         </button>
@@ -184,7 +184,7 @@ export const DashboardTab = ({ onOpenPersonalization }) => {
           <span className="block font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 mt-2">
             Monthly Report
           </span>
-          <span className="text-[10px] text-neutral-400 dark:text-zinc-500">
+          <span className="text-[10px] text-neutral-600 dark:text-zinc-400">
             Analytics & Tax
           </span>
         </button>
@@ -224,7 +224,7 @@ export const DashboardTab = ({ onOpenPersonalization }) => {
                     {report.reportNumber || 'Z-Report'}
                   </span>
                 </div>
-                <p className="text-[10px] text-neutral-400 dark:text-zinc-500 mt-0.5">
+                <p className="text-[10px] text-neutral-600 dark:text-zinc-400 mt-0.5">
                   {report.totalItemsSold} items • Closed {report.closingTime || '21:30'}
                 </p>
               </div>

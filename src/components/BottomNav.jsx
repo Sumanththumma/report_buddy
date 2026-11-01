@@ -41,7 +41,7 @@ export const BottomNav = () => {
                   <Camera className="w-5 h-5 stroke-[2.2]" />
                 </div>
                 <span className={`text-[9.5px] font-display font-medium tracking-tight mt-0.5 ${
-                  isActive ? 'text-rust-600 dark:text-rust-400 font-bold' : 'text-neutral-400 dark:text-zinc-500'
+                  isActive ? 'text-rust-600 dark:text-rust-400 font-bold' : 'text-neutral-600 dark:text-zinc-400'
                 }`}>
                   {item.label}
                 </span>
@@ -56,7 +56,7 @@ export const BottomNav = () => {
               className={`flex flex-col items-center justify-center py-1.5 px-3 rounded-full transition-all duration-200 ${
                 isActive
                   ? 'text-rust-600 dark:text-rust-400 font-semibold'
-                  : 'text-neutral-400 dark:text-zinc-500 hover:text-neutral-700 dark:hover:text-zinc-300'
+                  : 'text-neutral-600 dark:text-zinc-400 hover:text-neutral-900 dark:hover:text-zinc-200'
               }`}
             >
               <Icon className={`w-4 h-4 mb-0.5 transition-transform ${

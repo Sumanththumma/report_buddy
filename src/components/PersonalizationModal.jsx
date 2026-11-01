@@ -76,7 +76,7 @@ export const PersonalizationModal = ({ isOpen, onClose }) => {
               <h3 className="font-display font-bold text-sm text-neutral-900 dark:text-neutral-100">
                 Store Branding & Appearance
               </h3>
-              <p className="text-[10px] text-neutral-400 dark:text-zinc-500">
+              <p className="text-[10px] text-neutral-600 dark:text-zinc-400">
                 Custom icons, identity and typography accents
               </p>
             </div>

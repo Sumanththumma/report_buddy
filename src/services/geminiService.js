@@ -24,17 +24,15 @@ export const fileToBase64 = (file) => {
   });
 };
 
-// Priority candidate model list (modern 2.5, 2.0, 1.5 generations)
+// Priority candidate model list (modern active 2.0 and 1.5 generations)
 export const CANDIDATE_MODELS = [
-  'gemini-2.5-flash',
   'gemini-2.0-flash',
-  'gemini-2.0-flash-exp',
+  'gemini-2.0-flash-lite',
   'gemini-1.5-flash-latest',
   'gemini-1.5-flash-8b',
-  'gemini-1.5-flash',
+  'gemini-2.0-flash-exp',
   'gemini-1.5-pro-latest',
-  'gemini-1.5-pro',
-  'gemini-pro'
+  'gemini-1.5-pro'
 ];
 
 /**
@@ -242,12 +240,13 @@ Important Rules:
 - Output ONLY valid JSON, do NOT add introductory or conversational text.
 `;
 
-  // Construct parts: Compatible with both v1 and v1beta across all models
+  // Construct parts: Compatible with standard Google REST API specification
   const parts = [];
   if (imageBase64) {
+    // Standard Google Gemini REST API camelCase inlineData format
     parts.push({
-      inline_data: {
-        mime_type: mimeType,
+      inlineData: {
+        mimeType: mimeType || 'image/jpeg',
         data: imageBase64
       }
     });
@@ -273,19 +272,28 @@ Important Rules:
 
   try {
     const discovery = await fetchAvailableModels(apiKey);
-    if (discovery.success && discovery.models.length > 0) {
+    if (discovery.success && discovery.models && discovery.models.length > 0) {
       discoverySucceeded = true;
-      const detected = discovery.models.filter(m => 
-        m.includes('flash') || m.includes('pro') || m.includes('gemini')
-      );
+      // Filter out deprecated models like gemini-1.5-flash
+      const detected = discovery.models
+        .filter(m => m !== 'gemini-1.5-flash' && m !== 'gemini-2.5-flash')
+        .filter(m => m.includes('flash') || m.includes('pro') || m.includes('gemini'));
+
       if (detected.length > 0) {
-        // Prioritize models that actually exist on user's account
-        modelsToTry = [...detected, ...modelsToTry.filter(m => !detected.includes(m))];
+        // Prioritize models that actually exist on user's account (flash first)
+        const flashFirst = [
+          ...detected.filter(m => m.includes('flash')),
+          ...detected.filter(m => !m.includes('flash'))
+        ];
+        modelsToTry = [...flashFirst, ...modelsToTry.filter(m => !flashFirst.includes(m))];
       }
     }
   } catch (discErr) {
     console.warn('Model discovery skipped:', discErr.message);
   }
+
+  // Sanitize candidate list to exclude deprecated models
+  modelsToTry = modelsToTry.filter(m => m !== 'gemini-1.5-flash' && m !== 'gemini-2.5-flash');
 
   // If user selected a specific model in settings (other than deprecated gemini-1.5-flash)
   if (preferredModel && preferredModel.trim() && preferredModel !== 'auto' && preferredModel !== 'gemini-1.5-flash') {
@@ -363,13 +371,11 @@ Important Rules:
     }
   }
 
-  // If Gemini API failed but we have raw text, run smart heuristic parser
-  if (rawText && rawText.trim()) {
-    console.warn('Falling back to smart heuristic receipt parser.');
-    return parseReceiptWithSmartHeuristic(rawText);
-  }
-
-  throw lastError || new Error(
-    'Unable to connect to Gemini with this key. Please verify your Google AI Studio API key in Settings.'
-  );
+  // Fallback to built-in smart receipt parser so user workflow is never blocked
+  console.warn('Gemini API calls failed with:', lastError?.message);
+  console.warn('Falling back to built-in smart receipt parser.');
+  const fallbackResult = parseReceiptWithSmartHeuristic(rawText || '');
+  fallbackResult.isFallback = true;
+  fallbackResult.fallbackReason = lastError?.message || 'Google Gemini service was unavailable.';
+  return fallbackResult;
 };

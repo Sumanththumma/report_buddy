@@ -99,14 +99,14 @@ export const SettingsModal = ({ isOpen, onClose }) => {
               <h3 className="font-display font-bold text-sm text-neutral-900 dark:text-neutral-100">
                 Store & AI Settings
               </h3>
-              <p className="text-[10px] text-neutral-400 dark:text-zinc-500">
+              <p className="text-[10px] text-neutral-600 dark:text-zinc-400">
                 Configure store profile & Google Gemini LLM
               </p>
             </div>
           </div>
           <button 
             onClick={onClose}
-            className="text-neutral-400 hover:text-neutral-600 dark:hover:text-zinc-300 p-1 rounded-lg transition-colors"
+            className="text-neutral-500 hover:text-neutral-800 dark:hover:text-zinc-200 p-1 rounded-lg transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -140,7 +140,7 @@ export const SettingsModal = ({ isOpen, onClose }) => {
               placeholder="Paste Google AI Studio API key..."
               className="w-full text-xs font-mono bg-white dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-xl px-3 py-2 pl-8 outline-none focus:border-neutral-500 text-neutral-900 dark:text-zinc-100"
             />
-            <Key className="w-3.5 h-3.5 text-neutral-400 absolute left-2.5 top-2.5" />
+            <Key className="w-3.5 h-3.5 text-neutral-500 dark:text-zinc-400 absolute left-2.5 top-2.5" />
           </div>
 
           {/* Test Key Connection Button & Model Selector */}
@@ -173,10 +173,10 @@ export const SettingsModal = ({ isOpen, onClose }) => {
                 className="text-[10px] font-display font-bold bg-white dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2 py-1 text-neutral-800 dark:text-zinc-200 outline-none"
               >
                 <option value="auto">Auto-Detect Model (Recommended)</option>
-                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                <option value="gemini-2.0-flash">Gemini 2.0 Flash (Fast & Free)</option>
+                <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite (Ultra Fast)</option>
                 <option value="gemini-1.5-flash-latest">Gemini 1.5 Flash (Latest)</option>
-                <option value="gemini-1.5-flash-8b">Gemini 1.5 Flash 8B (Fastest)</option>
+                <option value="gemini-1.5-flash-8b">Gemini 1.5 Flash 8B</option>
                 <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
               </select>
             </div>

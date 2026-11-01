@@ -107,7 +107,7 @@ export const MonthlyAnalyticsTab = () => {
       <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 border border-neutral-200/80 dark:border-zinc-800/80 shadow-2xs space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <span className="text-[10px] font-display font-semibold uppercase tracking-wider text-neutral-400 dark:text-zinc-500">
+            <span className="text-[10px] font-display font-semibold uppercase tracking-wider text-neutral-600 dark:text-zinc-400">
               Monthly Intelligence
             </span>
             <h2 className="font-display text-base font-extrabold text-neutral-900 dark:text-neutral-100 mt-0.5">
@@ -134,7 +134,7 @@ export const MonthlyAnalyticsTab = () => {
 
         {/* Dropdown */}
         <div className="flex items-center space-x-2 pt-2 border-t border-neutral-100 dark:border-zinc-800/80 text-xs">
-          <Calendar className="w-3.5 h-3.5 text-neutral-400" />
+          <Calendar className="w-3.5 h-3.5 text-neutral-600 dark:text-zinc-400" />
           <span className="text-neutral-500 dark:text-zinc-400 font-medium">Month:</span>
           <select
             value={activeMonth}
@@ -174,7 +174,7 @@ export const MonthlyAnalyticsTab = () => {
         </div>
 
         <div className="bg-white dark:bg-zinc-900 rounded-2xl p-3.5 border border-neutral-200/80 dark:border-zinc-800/80 shadow-2xs">
-          <span className="text-[10px] font-medium text-neutral-400 dark:text-zinc-500 uppercase tracking-wider">Total Units</span>
+          <span className="text-[10px] font-medium text-neutral-600 dark:text-zinc-400 uppercase tracking-wider">Total Units</span>
           <p className="font-display text-xl font-extrabold text-neutral-900 dark:text-neutral-100 mt-0.5">
             {totalUnits.toLocaleString()}
           </p>
@@ -184,7 +184,7 @@ export const MonthlyAnalyticsTab = () => {
         </div>
 
         <div className="bg-white dark:bg-zinc-900 rounded-2xl p-3.5 border border-neutral-200/80 dark:border-zinc-800/80 shadow-2xs">
-          <span className="text-[10px] font-medium text-neutral-400 dark:text-zinc-500 uppercase tracking-wider">Daily Average</span>
+          <span className="text-[10px] font-medium text-neutral-600 dark:text-zinc-400 uppercase tracking-wider">Daily Average</span>
           <p className="font-display text-xl font-extrabold text-neutral-900 dark:text-neutral-100 mt-0.5">
             {shopProfile.currency}{avgDailySales.toLocaleString()}
           </p>
@@ -202,7 +202,7 @@ export const MonthlyAnalyticsTab = () => {
           <h3 className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 tracking-tight">
             Daily Trajectory
           </h3>
-          <span className="text-[10px] font-mono text-neutral-400 dark:text-zinc-500">
+          <span className="text-[10px] font-mono text-neutral-600 dark:text-zinc-400">
             Peak: {shopProfile.currency}{maxDaySales.toLocaleString()}
           </span>
         </div>
@@ -261,11 +261,11 @@ export const MonthlyAnalyticsTab = () => {
               <div key={idx} className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center space-x-1.5 truncate pr-2">
-                    <span className="font-mono text-[10px] text-neutral-400 dark:text-zinc-500 w-4">
+                    <span className="font-mono text-[10px] text-neutral-600 dark:text-zinc-400 w-4">
                       0{idx + 1}
                     </span>
                     <span className="font-semibold text-neutral-900 dark:text-neutral-100 truncate">{prod.productName}</span>
-                    <span className="text-[9px] font-mono text-neutral-400 bg-neutral-100 dark:bg-zinc-800 px-1 rounded shrink-0">
+                    <span className="text-[9px] font-mono text-neutral-600 dark:text-zinc-400 bg-neutral-100 dark:bg-zinc-800 px-1 rounded shrink-0">
                       HSN: {prod.hsnCode}
                     </span>
                   </div>
@@ -295,7 +295,7 @@ export const MonthlyAnalyticsTab = () => {
           <h3 className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 tracking-tight">
             HSN Tax Breakdown (GSTR-1)
           </h3>
-          <span className="text-[10px] font-mono text-neutral-400 dark:text-zinc-500">
+          <span className="text-[10px] font-mono text-neutral-600 dark:text-zinc-400">
             {hsnList.length} Codes
           </span>
         </div>
@@ -314,7 +314,7 @@ export const MonthlyAnalyticsTab = () => {
                   {shopProfile.currency}{item.taxableValue.toLocaleString()}
                 </span>
               </div>
-              <p className="text-[10px] text-neutral-400 dark:text-zinc-500 truncate">
+              <p className="text-[10px] text-neutral-600 dark:text-zinc-400 truncate">
                 {Array.from(item.productNames).join(', ')}
               </p>
               <div className="flex items-center justify-between pt-1 border-t border-neutral-100 dark:border-zinc-800/80 text-[10px] text-neutral-500 dark:text-zinc-400">

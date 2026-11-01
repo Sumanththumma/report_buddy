@@ -174,7 +174,7 @@ export const WelcomeScreen = ({ onOpenLogin, onOpenRegister }) => {
               <h2 className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100">
                 AI Z-Report Scanner
               </h2>
-              <p className="text-[10px] text-neutral-400 dark:text-zinc-500 truncate">
+              <p className="text-[10px] text-neutral-600 dark:text-zinc-400 truncate">
                 Snap paper closing slip to extract products & totals
               </p>
             </div>
@@ -191,7 +191,7 @@ export const WelcomeScreen = ({ onOpenLogin, onOpenRegister }) => {
               <h2 className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100">
                 HSN & GST Classification
               </h2>
-              <p className="text-[10px] text-neutral-400 dark:text-zinc-500 truncate">
+              <p className="text-[10px] text-neutral-600 dark:text-zinc-400 truncate">
                 Auto-assigned 4 to 8 digit codes for GSTR-1 filings
               </p>
             </div>
@@ -208,7 +208,7 @@ export const WelcomeScreen = ({ onOpenLogin, onOpenRegister }) => {
               <h2 className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100">
                 Monthly Analytics & CSV
               </h2>
-              <p className="text-[10px] text-neutral-400 dark:text-zinc-500 truncate">
+              <p className="text-[10px] text-neutral-600 dark:text-zinc-400 truncate">
                 Daily sales charts, top sellers, and tax export
               </p>
             </div>
@@ -243,7 +243,7 @@ export const WelcomeScreen = ({ onOpenLogin, onOpenRegister }) => {
           <span>Sign In to Existing Store</span>
         </motion.button>
 
-        <p className="text-[10px] text-center text-neutral-400 dark:text-zinc-600 font-sans pt-1">
+        <p className="text-[10px] text-center text-neutral-600 dark:text-zinc-400 font-sans pt-1">
           Each store gets an isolated database with encrypted auth.
         </p>
       </motion.div>

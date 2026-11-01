@@ -101,7 +101,7 @@ export const ProductsTab = () => {
               <Package className="w-4 h-4 text-neutral-600 dark:text-zinc-400 stroke-[2]" />
               Products Catalog
             </h2>
-            <p className="text-[11px] text-neutral-400 dark:text-zinc-500 font-medium mt-0.5">
+            <p className="text-[11px] text-neutral-600 dark:text-zinc-400 font-medium mt-0.5">
               {products.length} registered item{products.length === 1 ? '' : 's'} with GST HSN codes
             </p>
           </div>
@@ -122,9 +122,9 @@ export const ProductsTab = () => {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by product name or HSN code..."
-            className="w-full text-xs bg-neutral-50 dark:bg-zinc-850 border border-neutral-200 dark:border-zinc-800 rounded-xl px-3 py-2 pl-8 outline-none focus:border-neutral-500 text-neutral-900 dark:text-zinc-100 placeholder:text-neutral-400 dark:placeholder:text-zinc-500"
+            className="w-full text-xs bg-neutral-50 dark:bg-zinc-850 border border-neutral-200 dark:border-zinc-800 rounded-xl px-3 py-2 pl-8 outline-none focus:border-neutral-500 text-neutral-900 dark:text-zinc-100 placeholder:text-neutral-500 dark:placeholder:text-zinc-500"
           />
-          <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-2.5 top-2.5" />
+          <Search className="w-3.5 h-3.5 text-neutral-500 dark:text-zinc-400 absolute left-2.5 top-2.5" />
         </div>
 
         {/* Category Pills */}
@@ -175,7 +175,7 @@ export const ProductsTab = () => {
                       </span>
                     </div>
 
-                    <div className="flex items-center space-x-2 text-[11px] text-neutral-400 dark:text-zinc-500 mt-1 font-medium">
+                    <div className="flex items-center space-x-2 text-[11px] text-neutral-600 dark:text-zinc-400 mt-1 font-medium">
                       <span>{product.category || 'General'}</span>
                       <span>•</span>
                       <span>Unit: {product.unit || 'pcs'}</span>
@@ -188,7 +188,7 @@ export const ProductsTab = () => {
                   <div className="flex items-center space-x-1 shrink-0">
                     <button
                       onClick={() => openEditModal(product)}
-                      className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-900 dark:hover:text-zinc-100 hover:bg-neutral-100 dark:hover:bg-zinc-800 transition-colors"
+                      className="p-1.5 rounded-lg text-neutral-500 hover:text-neutral-900 dark:hover:text-zinc-100 hover:bg-neutral-100 dark:hover:bg-zinc-800 transition-colors"
                       title="Edit Product"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
@@ -199,7 +199,7 @@ export const ProductsTab = () => {
                           deleteProduct(product.id);
                         }
                       }}
-                      className="p-1.5 rounded-lg text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                      className="p-1.5 rounded-lg text-neutral-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
                       title="Delete Product"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -214,7 +214,7 @@ export const ProductsTab = () => {
                       {shopProfile.currency}{product.price?.toLocaleString()}
                     </span>
                     {product.costPrice > 0 && (
-                      <span className="text-[10px] text-neutral-400 dark:text-zinc-500 font-display">
+                      <span className="text-[10px] text-neutral-600 dark:text-zinc-400 font-display">
                         Cost: {shopProfile.currency}{product.costPrice}
                       </span>
                     )}
