@@ -1,6 +1,16 @@
-# RetailKhata - Mobile-First Daily Sales, Z-Report Scanner & Monthly Analytics
+# Report Buddy (RetailKhata) - Mobile-First Daily Sales, Z-Report Scanner & Monthly Analytics
+
+🌐 **Live Application**: [https://report-buddy-v2x7.onrender.com](https://report-buddy-v2x7.onrender.com)
 
 A production-grade, mobile-first web application designed specifically for retail shop owners. Snap a photo of your **End-Of-Day (EOD) Z-Report** at store closing, store all sold products, quantities, and **HSN codes** in a secure SQL database with **authentication**, **authorization**, and generate comprehensive **Monthly Sales Reports with data analytics**.
+
+---
+
+### 🔑 Demo Account
+- **Live URL**: [https://report-buddy-v2x7.onrender.com](https://report-buddy-v2x7.onrender.com)
+- **Email**: `demo@retailstore.com`
+- **Password**: `demo1234`
+*(Or use the 1-click **"Demo Shop Sign In"** button on the sign-in modal)*
 
 ---
 
