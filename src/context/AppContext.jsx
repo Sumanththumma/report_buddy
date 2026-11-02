@@ -280,8 +280,8 @@ export const AppProvider = ({ children }) => {
     showToast('Product removed');
   };
 
-  // Z-Report Actions with DB Persistence & Auto-Cataloging of Products
-  const addOrUpdateZReport = async (reportData) => {
+  // Z-Report Actions with DB Persistence & Manual/Reviewed New Product Cataloging
+  const addOrUpdateZReport = async (reportData, configuredNewProducts = []) => {
     const reportDate = reportData.date || new Date().toISOString().split('T')[0];
     const reportId = reportData.id || `z-${reportDate}-${Date.now().toString().slice(-4)}`;
 
@@ -308,47 +308,52 @@ export const AppProvider = ({ children }) => {
     setSelectedAnalyticsMonth(repMonth);
     setSelectedJournalDate(reportDate);
 
-    // Auto-populate / update product catalogue with items from this scanned Z-report
-    let addedOrUpdatedCount = 0;
-    if (reportData.items && Array.isArray(reportData.items) && reportData.items.length > 0) {
+    // If user reviewed and configured new products, merge them into local product catalogue
+    let addedCount = 0;
+    if (configuredNewProducts && configuredNewProducts.length > 0) {
       setProducts(prevProducts => {
         const prodMap = new Map();
         prevProducts.forEach(p => prodMap.set((p.name || '').toLowerCase().trim(), { ...p }));
 
-        reportData.items.forEach(item => {
-          const name = (item.productName || item.name || '').trim();
+        configuredNewProducts.forEach(item => {
+          if (item.addToCatalog === false) return;
+          const name = (item.name || item.productName || '').trim();
           if (!name) return;
           const key = name.toLowerCase();
-          const uPrice = parseFloat(item.unitPrice || item.price) || 0;
+          const uPrice = parseFloat(item.price || item.unitPrice) || 0;
+          const cPrice = parseFloat(item.costPrice) || Math.round(uPrice * 0.7);
           const hsn = item.hsnCode || item.hsn || '999999';
           const tax = parseFloat(item.taxRate) || 18;
           const unit = item.unit || 'pcs';
+          const category = (item.category || 'General').trim();
+          const stock = parseInt(item.stock) || 50;
 
           if (prodMap.has(key)) {
             const existing = prodMap.get(key);
             prodMap.set(key, {
               ...existing,
               price: uPrice > 0 ? uPrice : existing.price,
+              costPrice: cPrice > 0 ? cPrice : existing.costPrice,
               hsnCode: hsn !== '999999' ? hsn : existing.hsnCode,
               taxRate: tax,
               unit: unit || existing.unit,
+              category: category || existing.category,
               updatedAt: new Date().toISOString()
             });
-            addedOrUpdatedCount++;
           } else {
             prodMap.set(key, {
-              id: `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              id: item.id || `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
               name,
               hsnCode: hsn,
               price: uPrice,
-              costPrice: Math.round(uPrice * 0.7),
+              costPrice: cPrice,
               taxRate: tax,
               unit,
-              category: 'Scanned Items',
-              stock: 25,
+              category,
+              stock,
               updatedAt: new Date().toISOString()
             });
-            addedOrUpdatedCount++;
+            addedCount++;
           }
         });
 
@@ -361,7 +366,10 @@ export const AppProvider = ({ children }) => {
     // Save to real database & synchronize updated catalogue
     if (isAuthenticated) {
       try {
-        const res = await zReportsApi.save(reportData);
+        const res = await zReportsApi.save({
+          ...reportData,
+          newProducts: configuredNewProducts
+        });
         if (res.report) {
           setZReports(prev => prev.map(r => r.date === reportDate ? res.report : r));
         }
@@ -374,7 +382,11 @@ export const AppProvider = ({ children }) => {
       }
     }
 
-    showToast(`Z-Report saved! Catalog updated with ${addedOrUpdatedCount} products.`);
+    if (addedCount > 0) {
+      showToast(`Z-Report saved! ${addedCount} new product${addedCount > 1 ? 's' : ''} added to catalog.`);
+    } else {
+      showToast('Z-Report logged successfully!');
+    }
     return newReport;
   };
 

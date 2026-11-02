@@ -13,13 +13,30 @@ import {
   Plus, 
   CheckCircle2, 
   RefreshCw,
-  Wand2
+  Wand2,
+  Tag,
+  PackagePlus,
+  Layers,
+  Info
 } from 'lucide-react';
 import { 
   fileToBase64, 
   extractZReportWithGemini,
   parseReceiptWithSmartHeuristic
 } from '../services/geminiService';
+
+const COMMON_CATEGORIES = [
+  'Sarees & Fabrics',
+  'Blouse Materials',
+  'Apparel',
+  'Ethnic Wear',
+  'Groceries',
+  'Electronics',
+  'Home & Kitchen',
+  'Accessories',
+  'Tailoring',
+  'General Retail'
+];
 
 export const AIScanTab = ({ onOpenSettings }) => {
   const { 
@@ -41,9 +58,44 @@ export const AIScanTab = ({ onOpenSettings }) => {
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState(null);
   const [extractedZReport, setExtractedZReport] = useState(null);
+  const [newProductsConfig, setNewProductsConfig] = useState([]);
+  const [highlightEmptyCategories, setHighlightEmptyCategories] = useState(false);
 
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
+
+  const detectNewProducts = (itemsList) => {
+    if (!itemsList || !Array.isArray(itemsList)) return [];
+    const existingMap = new Map();
+    (products || []).forEach(p => existingMap.set((p.name || '').toLowerCase().trim(), p));
+    const discovered = [];
+    const seen = new Set();
+
+    itemsList.forEach(item => {
+      const name = (item.productName || item.name || '').trim();
+      if (!name) return;
+      const lower = name.toLowerCase();
+
+      if (!existingMap.has(lower) && !seen.has(lower)) {
+        seen.add(lower);
+        discovered.push({
+          id: `new-prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          originalName: name,
+          name: name,
+          category: '', // Blank: User must enter manually!
+          price: parseFloat(item.unitPrice || item.price) || 0,
+          costPrice: Math.round((parseFloat(item.unitPrice || item.price) || 0) * 0.7),
+          taxRate: parseFloat(item.taxRate) || 18,
+          hsnCode: item.hsnCode || item.hsn || '999999',
+          unit: item.unit || 'pcs',
+          stock: 50,
+          addToCatalog: true
+        });
+      }
+    });
+
+    return discovered;
+  };
 
   const handleFileChange = async (e) => {
     const file = e.target.files?.[0];
@@ -53,6 +105,8 @@ export const AIScanTab = ({ onOpenSettings }) => {
       setSelectedFile(file);
       setScanError(null);
       setExtractedZReport(null);
+      setNewProductsConfig([]);
+      setHighlightEmptyCategories(false);
 
       const base64Data = await fileToBase64(file);
       setImagePreview(base64Data.fullDataUrl);
@@ -111,6 +165,10 @@ export const AIScanTab = ({ onOpenSettings }) => {
       }
 
       setExtractedZReport(data);
+      const discovered = detectNewProducts(data.items);
+      setNewProductsConfig(discovered);
+      setHighlightEmptyCategories(false);
+
       if (data.isFallback) {
         showToast('Extracted with built-in engine. Verify items and totals.');
       } else {
@@ -135,7 +193,10 @@ export const AIScanTab = ({ onOpenSettings }) => {
     // If user's key failed, parse sample or fallback
     const fallbackData = parseReceiptWithSmartHeuristic(rawText || 'Daily Sales Z-Report Total: 19800');
     setExtractedZReport(fallbackData);
+    const discovered = detectNewProducts(fallbackData.items);
+    setNewProductsConfig(discovered);
     setScanError(null);
+    setHighlightEmptyCategories(false);
     showToast('Extracted with Smart Heuristic parser. Please verify items.');
   };
 
@@ -164,6 +225,12 @@ export const AIScanTab = ({ onOpenSettings }) => {
       grossSales: newGross,
       netSales: newNet
     });
+
+    // Update discovered new products if product name changed
+    if (field === 'productName') {
+      const discovered = detectNewProducts(updatedItems);
+      setNewProductsConfig(discovered);
+    }
   };
 
   const handleRemoveItem = (index) => {
@@ -178,6 +245,22 @@ export const AIScanTab = ({ onOpenSettings }) => {
       grossSales: newGross,
       netSales: newNet
     });
+
+    const discovered = detectNewProducts(updatedItems);
+    setNewProductsConfig(discovered);
+  };
+
+  const handleUpdateNewProductConfig = (index, field, value) => {
+    setNewProductsConfig(prev => {
+      const next = [...prev];
+      next[index] = {
+        ...next[index],
+        [field]: field === 'price' || field === 'costPrice' || field === 'stock' || field === 'taxRate'
+          ? (parseFloat(value) || 0)
+          : value
+      };
+      return next;
+    });
   };
 
   const handleConfirmAndSave = async () => {
@@ -186,14 +269,29 @@ export const AIScanTab = ({ onOpenSettings }) => {
       return;
     }
 
-    const saved = await addOrUpdateZReport(extractedZReport);
+    // Validate that every new product marked to add to catalog has a non-empty category
+    const unCategorized = newProductsConfig.filter(p => p.addToCatalog && !p.category?.trim());
+    if (unCategorized.length > 0) {
+      setHighlightEmptyCategories(true);
+      showToast(`Please enter a category for "${unCategorized[0].name}"`, 'error');
+      return;
+    }
+
+    const productsToCatalog = newProductsConfig.filter(p => p.addToCatalog);
+    const saved = await addOrUpdateZReport(extractedZReport, productsToCatalog);
     setSelectedJournalDate(saved.date);
     setActiveTab('daily_journal');
 
     setExtractedZReport(null);
     setImagePreview(null);
     setSelectedFile(null);
+    setNewProductsConfig([]);
+    setHighlightEmptyCategories(false);
   };
+
+  // Check how many new products are missing category
+  const unCategorizedCount = newProductsConfig.filter(p => p.addToCatalog && !p.category?.trim()).length;
+  const existingCatalogNames = new Set((products || []).map(p => (p.name || '').toLowerCase().trim()));
 
   return (
     <div className="space-y-4 pb-24 animate-fade-in">
@@ -469,96 +567,330 @@ export const AIScanTab = ({ onOpenSettings }) => {
             </div>
           </div>
 
+          {/* 🔔 NEW PRODUCTS DISCOVERED NOTIFICATION & MANUAL CATEGORIZATION */}
+          {newProductsConfig.length > 0 && (
+            <div className="space-y-3">
+              {/* Eye-catching Banner */}
+              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-rust-50 via-copper-50/60 to-amber-50 dark:from-rust-950/40 dark:via-copper-950/30 dark:to-zinc-900 border border-rust-300/80 dark:border-rust-800/80 shadow-2xs space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-2 w-2 rounded-full bg-rust-600 animate-ping" />
+                    <span className="font-display font-bold text-xs text-rust-900 dark:text-rust-200 uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-rust-600 dark:text-rust-400" />
+                      {newProductsConfig.length} New Product{newProductsConfig.length > 1 ? 's' : ''} Discovered
+                    </span>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                    unCategorizedCount === 0 
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
+                      : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-800'
+                  }`}>
+                    {newProductsConfig.length - unCategorizedCount} of {newProductsConfig.length} Categorized
+                  </span>
+                </div>
+                <p className="text-[11px] text-neutral-700 dark:text-zinc-300 font-sans leading-relaxed">
+                  These items were found on your Z-report and are not yet in your store catalog. Please <strong>enter a Category</strong> and verify the details for each product before saving.
+                </p>
+              </div>
+
+              {/* Cards for each new product */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between px-1">
+                  <span className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5">
+                    <PackagePlus className="w-3.5 h-3.5 text-rust-600 dark:text-rust-400" />
+                    Configure New Products ({newProductsConfig.length})
+                  </span>
+                  <span className="text-[10px] text-neutral-600 dark:text-zinc-400">
+                    * Category is required
+                  </span>
+                </div>
+
+                {newProductsConfig.map((prod, pIdx) => {
+                  const isMissingCat = highlightEmptyCategories && prod.addToCatalog && !prod.category?.trim();
+
+                  return (
+                    <div 
+                      key={prod.id || pIdx}
+                      className={`p-3.5 rounded-2xl border transition-all ${
+                        isMissingCat 
+                          ? 'border-red-400 dark:border-red-600/80 bg-red-50/40 dark:bg-red-950/20 shadow-xs ring-1 ring-red-400'
+                          : 'border-neutral-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-850/70 shadow-2xs'
+                      } space-y-3`}
+                    >
+                      {/* Header: Product Name + Add to catalog checkbox */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rust-100 text-rust-800 dark:bg-rust-950/80 dark:text-rust-300 border border-rust-200 dark:border-rust-800">
+                              NEW #{pIdx + 1}
+                            </span>
+                            <span className="text-[10px] font-medium text-neutral-600 dark:text-zinc-400">
+                              Product Name
+                            </span>
+                          </div>
+                          <input
+                            type="text"
+                            value={prod.name}
+                            onChange={(e) => handleUpdateNewProductConfig(pIdx, 'name', e.target.value)}
+                            className="w-full font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 outline-none focus:border-rust-500"
+                          />
+                        </div>
+
+                        <label className="flex items-center gap-1.5 text-[11px] font-medium text-neutral-700 dark:text-zinc-300 cursor-pointer pt-4 shrink-0">
+                          <input
+                            type="checkbox"
+                            checked={prod.addToCatalog}
+                            onChange={(e) => handleUpdateNewProductConfig(pIdx, 'addToCatalog', e.target.checked)}
+                            className="rounded border-neutral-300 text-rust-600 focus:ring-rust-500"
+                          />
+                          <span>Add to Catalog</span>
+                        </label>
+                      </div>
+
+                      {prod.addToCatalog && (
+                        <div className="space-y-2.5 pt-1 border-t border-neutral-100 dark:border-zinc-800/80">
+                          {/* Mandatory Category Input */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] font-bold text-neutral-800 dark:text-zinc-200 flex items-center gap-1">
+                                <Tag className="w-3 h-3 text-rust-600 dark:text-rust-400" />
+                                Category <span className="text-red-500">*</span>
+                              </span>
+                              {isMissingCat && (
+                                <span className="text-[10px] font-bold text-red-600 dark:text-red-400">
+                                  Category required!
+                                </span>
+                              )}
+                            </div>
+
+                            <input
+                              type="text"
+                              value={prod.category}
+                              placeholder="Type category (e.g. Sarees, Fabrics, Groceries, Apparel...)"
+                              onChange={(e) => handleUpdateNewProductConfig(pIdx, 'category', e.target.value)}
+                              className={`w-full font-semibold text-xs rounded-lg px-2.5 py-1.5 outline-none transition-colors ${
+                                isMissingCat
+                                  ? 'bg-red-50 dark:bg-red-950/40 border border-red-400 dark:border-red-500 text-neutral-900 dark:text-neutral-100 placeholder-red-400'
+                                  : 'bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 text-neutral-900 dark:text-neutral-100 focus:border-rust-500'
+                              }`}
+                            />
+
+                            {/* Quick Suggestion Chips */}
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              <span className="text-[9px] text-neutral-600 dark:text-zinc-400 self-center mr-1">Quick choose:</span>
+                              {COMMON_CATEGORIES.map(cat => (
+                                <button
+                                  key={cat}
+                                  type="button"
+                                  onClick={() => handleUpdateNewProductConfig(pIdx, 'category', cat)}
+                                  className={`text-[10px] px-2 py-0.5 rounded-full transition-all border ${
+                                    prod.category === cat
+                                      ? 'bg-rust-700 text-white border-rust-700 shadow-2xs font-semibold'
+                                      : 'bg-neutral-100 dark:bg-zinc-800 hover:bg-neutral-200 dark:hover:bg-zinc-700 text-neutral-700 dark:text-zinc-300 border-neutral-200 dark:border-zinc-700'
+                                  }`}
+                                >
+                                  {cat}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Inventory & Pricing Grid */}
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
+                            <div>
+                              <span className="block text-[9px] font-medium text-neutral-600 dark:text-zinc-400">
+                                Selling Rate ({shopProfile.currency})
+                              </span>
+                              <input
+                                type="number"
+                                min="0"
+                                value={prod.price}
+                                onChange={(e) => handleUpdateNewProductConfig(pIdx, 'price', e.target.value)}
+                                className="w-full font-display font-bold text-xs bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2 py-1 outline-none focus:border-rust-500"
+                              />
+                            </div>
+
+                            <div>
+                              <span className="block text-[9px] font-medium text-neutral-600 dark:text-zinc-400">
+                                Cost Price ({shopProfile.currency})
+                              </span>
+                              <input
+                                type="number"
+                                min="0"
+                                value={prod.costPrice}
+                                onChange={(e) => handleUpdateNewProductConfig(pIdx, 'costPrice', e.target.value)}
+                                className="w-full font-display font-bold text-xs bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2 py-1 outline-none focus:border-rust-500"
+                              />
+                            </div>
+
+                            <div>
+                              <span className="block text-[9px] font-medium text-neutral-600 dark:text-zinc-400">
+                                Unit
+                              </span>
+                              <select
+                                value={prod.unit}
+                                onChange={(e) => handleUpdateNewProductConfig(pIdx, 'unit', e.target.value)}
+                                className="w-full font-display font-medium text-xs bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2 py-1 outline-none focus:border-rust-500 text-neutral-900 dark:text-neutral-100"
+                              >
+                                <option value="pcs">pcs</option>
+                                <option value="mtr">mtr</option>
+                                <option value="kg">kg</option>
+                                <option value="gm">gm</option>
+                                <option value="pkt">pkt</option>
+                                <option value="box">box</option>
+                                <option value="pair">pair</option>
+                                <option value="set">set</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <span className="block text-[9px] font-medium text-neutral-600 dark:text-zinc-400">
+                                Opening Stock
+                              </span>
+                              <input
+                                type="number"
+                                min="0"
+                                value={prod.stock}
+                                onChange={(e) => handleUpdateNewProductConfig(pIdx, 'stock', e.target.value)}
+                                className="w-full font-display font-bold text-xs bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2 py-1 outline-none focus:border-rust-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Itemized List */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100">
-                Itemized Products ({extractedZReport.items?.length || 0})
+                Itemized Sales on Report ({extractedZReport.items?.length || 0})
               </span>
             </div>
 
-            {extractedZReport.items?.map((item, idx) => (
-              <div 
-                key={idx}
-                className="p-3 rounded-2xl border border-neutral-200/80 dark:border-zinc-800/80 bg-neutral-50/50 dark:bg-zinc-850/40 space-y-2 text-xs"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <input
-                    type="text"
-                    value={item.productName}
-                    onChange={(e) => handleUpdateItem(idx, 'productName', e.target.value)}
-                    className="flex-1 font-semibold text-neutral-900 dark:text-neutral-100 bg-white dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2 py-1 text-xs"
-                  />
-                  <button
-                    onClick={() => handleRemoveItem(idx)}
-                    className="text-neutral-400 hover:text-red-500 p-1"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+            {extractedZReport.items?.map((item, idx) => {
+              const itemName = (item.productName || item.name || '').trim().toLowerCase();
+              const isExisting = existingCatalogNames.has(itemName);
+              const newProdConfig = newProductsConfig.find(p => p.originalName?.toLowerCase() === itemName);
 
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <span className="block text-[9px] font-medium text-neutral-400 dark:text-zinc-500">HSN Code</span>
-                    <input
-                      type="text"
-                      value={item.hsnCode || ''}
-                      onChange={(e) => handleUpdateItem(idx, 'hsnCode', e.target.value)}
-                      className="w-full font-mono text-xs font-bold text-neutral-900 dark:text-neutral-100 bg-white dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2 py-1"
-                    />
+              return (
+                <div 
+                  key={idx}
+                  className="p-3 rounded-2xl border border-neutral-200/80 dark:border-zinc-800/80 bg-neutral-50/50 dark:bg-zinc-850/40 space-y-2 text-xs"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 space-y-1">
+                      <input
+                        type="text"
+                        value={item.productName}
+                        onChange={(e) => handleUpdateItem(idx, 'productName', e.target.value)}
+                        className="w-full font-semibold text-neutral-900 dark:text-neutral-100 bg-white dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2 py-1 text-xs"
+                      />
+                      <div className="flex items-center gap-1.5">
+                        {isExisting ? (
+                          <span className="text-[9px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/40">
+                            ✓ In Store Catalog
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-bold text-rust-700 dark:text-rust-300 bg-rust-50 dark:bg-rust-950/50 px-2 py-0.5 rounded-md border border-rust-200 dark:border-rust-800/40 flex items-center gap-1">
+                            <Sparkles className="w-2.5 h-2.5" />
+                            New: {newProdConfig?.category || 'Category Needed'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleRemoveItem(idx)}
+                      className="text-neutral-400 hover:text-red-500 p-1"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
                   </div>
-                  <div>
-                    <span className="block text-[9px] font-medium text-neutral-400 dark:text-zinc-500">Rate</span>
-                    <input
-                      type="number"
-                      value={item.unitPrice}
-                      onChange={(e) => handleUpdateItem(idx, 'unitPrice', e.target.value)}
-                      className="w-full font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 bg-white dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2 py-1"
-                    />
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <span className="block text-[9px] font-medium text-neutral-600 dark:text-zinc-400">HSN Code</span>
+                      <input
+                        type="text"
+                        value={item.hsnCode || ''}
+                        onChange={(e) => handleUpdateItem(idx, 'hsnCode', e.target.value)}
+                        className="w-full font-mono text-xs font-bold text-neutral-900 dark:text-neutral-100 bg-white dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2 py-1"
+                      />
+                    </div>
+                    <div>
+                      <span className="block text-[9px] font-medium text-neutral-600 dark:text-zinc-400">Rate</span>
+                      <input
+                        type="number"
+                        value={item.unitPrice}
+                        onChange={(e) => handleUpdateItem(idx, 'unitPrice', e.target.value)}
+                        className="w-full font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 bg-white dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2 py-1"
+                      />
+                    </div>
+                    <div>
+                      <span className="block text-[9px] font-medium text-neutral-600 dark:text-zinc-400">Qty</span>
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={(e) => handleUpdateItem(idx, 'quantity', e.target.value)}
+                        className="w-full font-display font-bold text-xs text-center text-neutral-900 dark:text-neutral-100 bg-white dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2 py-1"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <span className="block text-[9px] font-medium text-neutral-400 dark:text-zinc-500">Qty</span>
-                    <input
-                      type="number"
-                      min="1"
-                      value={item.quantity}
-                      onChange={(e) => handleUpdateItem(idx, 'quantity', e.target.value)}
-                      className="w-full font-display font-bold text-xs text-center text-neutral-900 dark:text-neutral-100 bg-white dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2 py-1"
-                    />
+
+                  <div className="flex items-center justify-between pt-1 text-[10px] text-neutral-500 dark:text-zinc-400 border-t border-neutral-100 dark:border-zinc-800">
+                    <span>GST: {item.taxRate || 18}%</span>
+                    <span className="font-display font-bold text-neutral-900 dark:text-neutral-100">
+                      Total: {shopProfile.currency}{item.lineTotal?.toLocaleString()}
+                    </span>
                   </div>
                 </div>
-
-                <div className="flex items-center justify-between pt-1 text-[10px] text-neutral-500 dark:text-zinc-400 border-t border-neutral-100 dark:border-zinc-800">
-                  <span>GST: {item.taxRate || 18}%</span>
-                  <span className="font-display font-bold text-neutral-900 dark:text-neutral-100">
-                    Total: {shopProfile.currency}{item.lineTotal?.toLocaleString()}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Auto-catalog notice */}
-          <div className="flex items-center gap-2 p-2.5 rounded-2xl bg-rust-50 dark:bg-rust-950/40 border border-rust-200/60 dark:border-rust-900/60 text-rust-800 dark:text-rust-300 text-xs">
-            <Sparkles className="w-4 h-4 shrink-0 text-rust-600 dark:text-rust-400" />
-            <span className="text-[11px] leading-tight">
-              <strong>Auto-Catalog Active:</strong> Saving this report will automatically update your store catalog with these {extractedZReport.items.length} products.
-            </span>
+              );
+            })}
           </div>
 
           {/* Confirm & Save */}
-          <div className="space-y-2 pt-1">
+          <div className="space-y-2 pt-2">
+            {unCategorizedCount > 0 && (
+              <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span className="text-[11px] font-medium">
+                  Please enter a <strong>Category</strong> for all {unCategorizedCount} new product{unCategorizedCount > 1 ? 's' : ''} to save.
+                </span>
+              </div>
+            )}
+
             <button
               onClick={handleConfirmAndSave}
-              className="w-full py-3 rounded-full bg-gradient-to-r from-rust-700 via-rust-600 to-copper-600 hover:from-rust-600 hover:to-copper-500 text-white font-display font-bold text-xs shadow-spray-rust flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
+              className={`w-full py-3 rounded-full font-display font-bold text-xs shadow-spray-rust flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
+                unCategorizedCount > 0
+                  ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                  : 'bg-gradient-to-r from-rust-700 via-rust-600 to-copper-600 hover:from-rust-600 hover:to-copper-500 text-white'
+              }`}
             >
-              <Check className="w-4 h-4 stroke-[2.5]" />
-              Confirm, Log Z-Report & Update Catalog
+              {unCategorizedCount > 0 ? (
+                <>
+                  <AlertCircle className="w-4 h-4 stroke-[2.5]" />
+                  Enter Category for {unCategorizedCount} New Product{unCategorizedCount > 1 ? 's' : ''}
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4 stroke-[2.5]" />
+                  Confirm, Log Z-Report & Add {newProductsConfig.filter(p => p.addToCatalog).length} Products
+                </>
+              )}
             </button>
             <button
               onClick={() => {
                 setExtractedZReport(null);
                 setImagePreview(null);
+                setNewProductsConfig([]);
+                setHighlightEmptyCategories(false);
               }}
               className="w-full py-1.5 text-neutral-400 hover:text-neutral-700 dark:hover:text-zinc-200 text-xs text-center"
             >

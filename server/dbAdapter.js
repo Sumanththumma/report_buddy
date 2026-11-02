@@ -186,96 +186,8 @@ const getRawProducts = async (userId) => {
   }
 };
 
-export const ensureUserProducts = async (userId) => {
-  const currentProds = await getRawProducts(userId);
-  if (currentProds && currentProds.length > 0) return currentProds;
-
-  // 1. Try backfilling from any Z-reports this user has scanned
-  if (isSupabaseEnabled()) {
-    const { data: items } = await supabase
-      .from('z_report_items')
-      .select('*')
-      .eq('user_id', userId);
-
-    if (items && items.length > 0) {
-      const prodMap = new Map();
-      items.forEach(i => {
-        const name = (i.product_name || '').trim();
-        if (name && !prodMap.has(name.toLowerCase())) {
-          prodMap.set(name.toLowerCase(), {
-            id: `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-            user_id: userId,
-            name,
-            hsn_code: i.hsn_code || '999999',
-            price: parseFloat(i.unit_price) || 0,
-            cost_price: Math.round((parseFloat(i.unit_price) || 0) * 0.7),
-            tax_rate: parseFloat(i.tax_rate) || 18,
-            unit: i.unit || 'pcs',
-            category: 'Scanned Items',
-            stock: 25
-          });
-        }
-      });
-      if (prodMap.size > 0) {
-        await supabase.from('products').insert(Array.from(prodMap.values()));
-        return getRawProducts(userId);
-      }
-    }
-  }
-
-  // 2. Auto-seed based on user's shop name & category
-  const user = await getUserById(userId);
-  const shopNameLower = (user?.shop_name || '').toLowerCase();
-  let starterList = [
-    { name: 'Cotton Crew T-Shirt', hsn: '61091000', price: 499, cost: 260, tax: 5, unit: 'pcs', cat: 'Apparel', stock: 50 },
-    { name: 'Slim Fit Denim Jeans', hsn: '62034200', price: 1499, cost: 790, tax: 12, unit: 'pcs', cat: 'Apparel', stock: 30 },
-    { name: 'Wireless Bluetooth Earbuds', hsn: '85183000', price: 1299, cost: 750, tax: 18, unit: 'pcs', cat: 'Electronics', stock: 30 },
-    { name: 'USB-C Fast Cable 65W', hsn: '85444299', price: 249, cost: 110, tax: 18, unit: 'pcs', cat: 'Electronics', stock: 80 }
-  ];
-
-  if (shopNameLower.includes('matching') || shopNameLower.includes('textile')) {
-    starterList = [
-      { name: '2x2 Premium Cotton Blouse Piece', hsn: '52081190', price: 120, cost: 75, tax: 5, unit: 'pcs', cat: 'Blouse Materials', stock: 120 },
-      { name: 'Rubia Cotton Lining Cloth (1 Mtr)', hsn: '52081290', price: 65, cost: 40, tax: 5, unit: 'mtr', cat: 'Lining & Fabric', stock: 250 },
-      { name: 'Designer Brocade Blouse Piece', hsn: '54075200', price: 250, cost: 150, tax: 5, unit: 'pcs', cat: 'Blouse Materials', stock: 80 },
-      { name: 'Saree Fall & Matching Pico Thread', hsn: '54024400', price: 35, cost: 18, tax: 5, unit: 'pcs', cat: 'Tailoring', stock: 300 },
-      { name: 'Stretchable Ready-to-Wear Cotton Blouse', hsn: '61061000', price: 499, cost: 280, tax: 5, unit: 'pcs', cat: 'Readymade Blouse', stock: 45 },
-      { name: 'Cotton Petticoat / Saree Inskirt', hsn: '62089100', price: 180, cost: 110, tax: 5, unit: 'pcs', cat: 'Inskirts', stock: 75 }
-    ];
-  } else if (shopNameLower.includes('boutique') || shopNameLower.includes('saree') || shopNameLower.includes('fashion')) {
-    starterList = [
-      { name: 'Designer Embroidered Cotton Kurti', hsn: '62042200', price: 1299, cost: 720, tax: 5, unit: 'pcs', cat: 'Ethnic Wear', stock: 35 },
-      { name: 'Pure Handloom Silk Saree with Blouse', hsn: '50072090', price: 2850, cost: 1650, tax: 5, unit: 'pcs', cat: 'Sarees', stock: 25 },
-      { name: 'Chanderi Silk Printed Dupatta', hsn: '62149090', price: 450, cost: 240, tax: 5, unit: 'pcs', cat: 'Dupattas', stock: 50 },
-      { name: 'Raw Silk Unstitched Blouse Piece', hsn: '50072090', price: 380, cost: 210, tax: 5, unit: 'pcs', cat: 'Blouse Pieces', stock: 65 },
-      { name: 'Ankle Length Lycra Cotton Leggings', hsn: '61046200', price: 349, cost: 180, tax: 5, unit: 'pcs', cat: 'Bottom Wear', stock: 80 }
-    ];
-  }
-
-  for (const item of starterList) {
-    await createProduct({
-      id: `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      userId,
-      name: item.name,
-      hsnCode: item.hsn,
-      price: item.price,
-      costPrice: item.cost,
-      taxRate: item.tax,
-      unit: item.unit,
-      category: item.cat,
-      stock: item.stock
-    });
-  }
-
-  return getRawProducts(userId);
-};
-
 export const getProducts = async (userId) => {
-  const prods = await getRawProducts(userId);
-  if (!prods || prods.length === 0) {
-    return ensureUserProducts(userId);
-  }
-  return prods;
+  return getRawProducts(userId);
 };
 
 export const createProduct = async (productData) => {
@@ -559,7 +471,11 @@ export const getZReportByDate = async (userId, date) => {
   }
 };
 
-export const createZReport = async (reportData, items = []) => {
+export const createZReport = async (reportData, items = [], newProducts = []) => {
+  const configuredProducts = (newProducts && newProducts.length > 0)
+    ? newProducts
+    : (reportData.newProducts || []);
+
   if (isSupabaseEnabled()) {
     // Delete existing report for this date
     const existing = await getZReportByDate(reportData.userId, reportData.date);
@@ -603,31 +519,40 @@ export const createZReport = async (reportData, items = []) => {
       }));
       const { error: itemErr } = await supabase.from('z_report_items').insert(formattedItems);
       if (itemErr) throw itemErr;
+    }
 
-      // Auto-catalog missing products & update existing product details in Supabase
+    // Process user-reviewed / manually categorized new products
+    if (configuredProducts.length > 0) {
       const { data: existingProds } = await supabase
         .from('products')
-        .select('id, name, price, stock, hsn_code')
+        .select('id, name, price, stock, hsn_code, category')
         .eq('user_id', reportData.userId);
 
       const prodMap = new Map();
       (existingProds || []).forEach(p => prodMap.set((p.name || '').toLowerCase().trim(), p));
 
-      for (const item of items) {
-        const prodName = (item.productName || item.name || '').trim();
+      for (const prod of configuredProducts) {
+        if (prod.addToCatalog === false) continue;
+        const prodName = (prod.name || prod.productName || '').trim();
         if (!prodName) continue;
         const key = prodName.toLowerCase();
-        const uPrice = parseFloat(item.unitPrice || item.price) || 0;
-        const hsn = item.hsnCode || item.hsn || '999999';
-        const tax = parseFloat(item.taxRate) || 18;
-        const unit = item.unit || 'pcs';
+        const uPrice = parseFloat(prod.price || prod.unitPrice) || 0;
+        const cPrice = parseFloat(prod.costPrice) || Math.round(uPrice * 0.7);
+        const hsn = prod.hsnCode || prod.hsn || '999999';
+        const tax = parseFloat(prod.taxRate) || 18;
+        const unit = prod.unit || 'pcs';
+        const category = (prod.category || 'General').trim();
+        const stock = parseInt(prod.stock) || 50;
 
         if (prodMap.has(key)) {
           const match = prodMap.get(key);
           await supabase.from('products').update({
             price: uPrice > 0 ? uPrice : match.price,
+            cost_price: cPrice > 0 ? cPrice : match.cost_price,
             hsn_code: hsn !== '999999' ? hsn : match.hsn_code,
             tax_rate: tax,
+            unit: unit || match.unit,
+            category: category || match.category,
             updated_at: new Date().toISOString()
           }).eq('id', match.id);
         } else {
@@ -638,13 +563,13 @@ export const createZReport = async (reportData, items = []) => {
             name: prodName,
             hsn_code: hsn,
             price: uPrice,
-            cost_price: Math.round(uPrice * 0.7),
+            cost_price: cPrice,
             tax_rate: tax,
             unit,
-            category: 'Scanned Items',
-            stock: 25
+            category,
+            stock
           }]);
-          prodMap.set(key, { id: newProdId, name: prodName, price: uPrice, hsn_code: hsn });
+          prodMap.set(key, { id: newProdId, name: prodName, price: uPrice, hsn_code: hsn, category });
         }
       }
     }
@@ -688,20 +613,6 @@ export const createZReport = async (reportData, items = []) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    const findProd = db.prepare(`
-      SELECT id, price, hsn_code FROM products 
-      WHERE user_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))
-    `);
-    const updateExisting = db.prepare(`
-      UPDATE products 
-      SET price = ?, hsn_code = ?, tax_rate = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `);
-    const insertNewProd = db.prepare(`
-      INSERT INTO products (id, user_id, name, hsn_code, price, cost_price, tax_rate, unit, category, stock)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
     for (const item of items) {
       const prodName = (item.productName || item.name || '').trim();
       const uPrice = parseFloat(item.unitPrice || item.price) || 0;
@@ -723,12 +634,47 @@ export const createZReport = async (reportData, items = []) => {
         lTotal,
         tax
       );
+    }
 
-      // Auto add / update in product catalog
-      if (prodName) {
+    // Process user-reviewed / manually categorized new products for SQLite
+    if (configuredProducts.length > 0) {
+      const findProd = db.prepare(`
+        SELECT id, price, hsn_code, category FROM products 
+        WHERE user_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))
+      `);
+      const updateExisting = db.prepare(`
+        UPDATE products 
+        SET price = ?, cost_price = ?, hsn_code = ?, tax_rate = ?, unit = ?, category = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `);
+      const insertNewProd = db.prepare(`
+        INSERT INTO products (id, user_id, name, hsn_code, price, cost_price, tax_rate, unit, category, stock)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      for (const prod of configuredProducts) {
+        if (prod.addToCatalog === false) continue;
+        const prodName = (prod.name || prod.productName || '').trim();
+        if (!prodName) continue;
+        const uPrice = parseFloat(prod.price || prod.unitPrice) || 0;
+        const cPrice = parseFloat(prod.costPrice) || Math.round(uPrice * 0.7);
+        const hsn = prod.hsnCode || prod.hsn || '999999';
+        const tax = parseFloat(prod.taxRate) || 18;
+        const unit = prod.unit || 'pcs';
+        const category = (prod.category || 'General').trim();
+        const stock = parseInt(prod.stock) || 50;
+
         const match = findProd.get(reportData.userId, prodName);
         if (match) {
-          updateExisting.run(uPrice > 0 ? uPrice : match.price, hsn !== '999999' ? hsn : match.hsn_code, tax, match.id);
+          updateExisting.run(
+            uPrice > 0 ? uPrice : match.price,
+            cPrice,
+            hsn !== '999999' ? hsn : match.hsn_code,
+            tax,
+            unit,
+            category || match.category,
+            match.id
+          );
         } else {
           insertNewProd.run(
             `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -736,11 +682,11 @@ export const createZReport = async (reportData, items = []) => {
             prodName,
             hsn,
             uPrice,
-            Math.round(uPrice * 0.7),
+            cPrice,
             tax,
             unit,
-            'Scanned Items',
-            25
+            category,
+            stock
           );
         }
       }

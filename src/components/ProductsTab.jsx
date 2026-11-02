@@ -10,7 +10,8 @@ import {
   X, 
   Tag, 
   Boxes, 
-  AlertTriangle
+  AlertTriangle,
+  Sparkles
 } from 'lucide-react';
 
 const COMMON_HSN_CATEGORIES = [
@@ -22,7 +23,7 @@ const COMMON_HSN_CATEGORIES = [
 ];
 
 export const ProductsTab = () => {
-  const { products, addProduct, updateProduct, deleteProduct, shopProfile } = useApp();
+  const { products, addProduct, updateProduct, deleteProduct, shopProfile, setActiveTab } = useApp();
 
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('ALL');
@@ -147,11 +148,38 @@ export const ProductsTab = () => {
 
       {/* Product List */}
       <div className="space-y-2.5">
-        {filteredProducts.length === 0 ? (
+        {products.length === 0 ? (
+          <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-neutral-200/80 dark:border-zinc-800/80 text-center space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-rust-50 dark:bg-rust-950/60 border border-rust-200 dark:border-rust-800/60 flex items-center justify-center mx-auto text-rust-600 dark:text-rust-400 shadow-spray-rust">
+              <Package className="w-6 h-6 stroke-[1.5]" />
+            </div>
+            <div>
+              <p className="font-display font-bold text-sm text-neutral-800 dark:text-zinc-200">Catalog is Empty</p>
+              <p className="text-xs text-neutral-500 dark:text-zinc-400 mt-1 max-w-xs mx-auto">
+                Scan your daily Z-Report to discover items and assign their categories, or add products manually.
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-2 pt-1">
+              <button
+                onClick={() => setActiveTab('ai_scan')}
+                className="px-4 py-2 rounded-full bg-gradient-to-r from-rust-700 to-copper-600 text-white font-display font-bold text-xs shadow-spray-rust flex items-center gap-1.5 transition-all active:scale-95"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Scan Z-Report
+              </button>
+              <button
+                onClick={openAddModal}
+                className="px-4 py-2 rounded-full bg-neutral-100 hover:bg-neutral-200 dark:bg-zinc-800 dark:hover:bg-zinc-750 text-neutral-800 dark:text-zinc-200 font-display font-semibold text-xs border border-neutral-200 dark:border-zinc-700 transition-all active:scale-95"
+              >
+                + Add Product
+              </button>
+            </div>
+          </div>
+        ) : filteredProducts.length === 0 ? (
           <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-neutral-200/80 dark:border-zinc-800/80 text-center text-neutral-400 dark:text-zinc-500">
             <Package className="w-9 h-9 mx-auto text-neutral-300 dark:text-zinc-700 mb-2 stroke-1" />
-            <p className="font-display font-bold text-xs text-neutral-700 dark:text-zinc-300">No products found</p>
-            <p className="text-[11px] text-neutral-400 dark:text-zinc-500 mt-0.5">Try searching another keyword or add an item.</p>
+            <p className="font-display font-bold text-xs text-neutral-700 dark:text-zinc-300">No matching products found</p>
+            <p className="text-[11px] text-neutral-400 dark:text-zinc-500 mt-0.5">Try searching another keyword or clearing category filters.</p>
           </div>
         ) : (
           filteredProducts.map(product => {

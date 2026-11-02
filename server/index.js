@@ -483,7 +483,7 @@ app.post('/api/z-reports', requireAuth, async (req, res) => {
       date: req.body.date || new Date().toISOString().split('T')[0],
       storeName: req.body.storeName || req.user.shop_name || 'Retail Store'
     };
-    const saved = await dbAdapter.createZReport(reportData, req.body.items || []);
+    const saved = await dbAdapter.createZReport(reportData, req.body.items || [], req.body.newProducts || []);
     const updatedProducts = await dbAdapter.getProducts(req.user.id);
     res.status(201).json({ 
       message: 'Z-Report stored successfully and product catalogue updated', 
