@@ -498,19 +498,63 @@ export const createZReport = async (reportData, items = []) => {
 
     if (items.length > 0) {
       const formattedItems = items.map(i => ({
-        id: i.id,
+        id: i.id || `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         z_report_id: reportData.id,
         user_id: reportData.userId,
-        product_name: i.productName,
-        hsn_code: i.hsnCode,
-        quantity: i.quantity,
+        product_name: i.productName || i.name,
+        hsn_code: i.hsnCode || i.hsn || '999999',
+        quantity: parseInt(i.quantity || i.qty) || 1,
         unit: i.unit || 'pcs',
-        unit_price: i.unitPrice,
-        line_total: i.lineTotal,
-        tax_rate: i.taxRate
+        unit_price: parseFloat(i.unitPrice || i.price) || 0,
+        line_total: parseFloat(i.lineTotal || i.total) || 0,
+        tax_rate: parseFloat(i.taxRate) || 18
       }));
       const { error: itemErr } = await supabase.from('z_report_items').insert(formattedItems);
       if (itemErr) throw itemErr;
+
+      // Auto-catalog missing products & update existing product details in Supabase
+      const { data: existingProds } = await supabase
+        .from('products')
+        .select('id, name, price, stock, hsn_code')
+        .eq('user_id', reportData.userId);
+
+      const prodMap = new Map();
+      (existingProds || []).forEach(p => prodMap.set((p.name || '').toLowerCase().trim(), p));
+
+      for (const item of items) {
+        const prodName = (item.productName || item.name || '').trim();
+        if (!prodName) continue;
+        const key = prodName.toLowerCase();
+        const uPrice = parseFloat(item.unitPrice || item.price) || 0;
+        const hsn = item.hsnCode || item.hsn || '999999';
+        const tax = parseFloat(item.taxRate) || 18;
+        const unit = item.unit || 'pcs';
+
+        if (prodMap.has(key)) {
+          const match = prodMap.get(key);
+          await supabase.from('products').update({
+            price: uPrice > 0 ? uPrice : match.price,
+            hsn_code: hsn !== '999999' ? hsn : match.hsn_code,
+            tax_rate: tax,
+            updated_at: new Date().toISOString()
+          }).eq('id', match.id);
+        } else {
+          const newProdId = `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+          await supabase.from('products').insert([{
+            id: newProdId,
+            user_id: reportData.userId,
+            name: prodName,
+            hsn_code: hsn,
+            price: uPrice,
+            cost_price: Math.round(uPrice * 0.7),
+            tax_rate: tax,
+            unit,
+            category: 'Scanned Items',
+            stock: 25
+          }]);
+          prodMap.set(key, { id: newProdId, name: prodName, price: uPrice, hsn_code: hsn });
+        }
+      }
     }
 
     return getZReportByDate(reportData.userId, reportData.date);
@@ -552,19 +596,62 @@ export const createZReport = async (reportData, items = []) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
+    const findProd = db.prepare(`
+      SELECT id, price, hsn_code FROM products 
+      WHERE user_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))
+    `);
+    const updateExisting = db.prepare(`
+      UPDATE products 
+      SET price = ?, hsn_code = ?, tax_rate = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+    const insertNewProd = db.prepare(`
+      INSERT INTO products (id, user_id, name, hsn_code, price, cost_price, tax_rate, unit, category, stock)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
     for (const item of items) {
+      const prodName = (item.productName || item.name || '').trim();
+      const uPrice = parseFloat(item.unitPrice || item.price) || 0;
+      const hsn = item.hsnCode || item.hsn || '999999';
+      const tax = parseFloat(item.taxRate) || 18;
+      const unit = item.unit || 'pcs';
+      const qty = parseInt(item.quantity || item.qty) || 1;
+      const lTotal = parseFloat(item.lineTotal || item.total) || 0;
+
       insertItem.run(
-        item.id,
+        item.id || `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         reportData.id,
         reportData.userId,
-        item.productName,
-        item.hsnCode,
-        item.quantity,
-        item.unit || 'pcs',
-        item.unitPrice,
-        item.lineTotal,
-        item.taxRate
+        prodName || 'Item',
+        hsn,
+        qty,
+        unit,
+        uPrice,
+        lTotal,
+        tax
       );
+
+      // Auto add / update in product catalog
+      if (prodName) {
+        const match = findProd.get(reportData.userId, prodName);
+        if (match) {
+          updateExisting.run(uPrice > 0 ? uPrice : match.price, hsn !== '999999' ? hsn : match.hsn_code, tax, match.id);
+        } else {
+          insertNewProd.run(
+            `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            reportData.userId,
+            prodName,
+            hsn,
+            uPrice,
+            Math.round(uPrice * 0.7),
+            tax,
+            unit,
+            'Scanned Items',
+            25
+          );
+        }
+      }
     }
 
     return getZReportByDate(reportData.userId, reportData.date);

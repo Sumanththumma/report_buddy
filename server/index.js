@@ -473,7 +473,7 @@ app.get('/api/z-reports/:date', requireAuth, async (req, res) => {
   }
 });
 
-// Save or Update Z-Report (with itemized breakdown)
+// Save or Update Z-Report (with itemized breakdown & auto product cataloging)
 app.post('/api/z-reports', requireAuth, async (req, res) => {
   try {
     const reportData = {
@@ -484,7 +484,12 @@ app.post('/api/z-reports', requireAuth, async (req, res) => {
       storeName: req.body.storeName || req.user.shop_name || 'Retail Store'
     };
     const saved = await dbAdapter.createZReport(reportData, req.body.items || []);
-    res.status(201).json({ message: 'Z-Report stored successfully in database', report: saved });
+    const updatedProducts = await dbAdapter.getProducts(req.user.id);
+    res.status(201).json({ 
+      message: 'Z-Report stored successfully and product catalogue updated', 
+      report: saved,
+      products: updatedProducts
+    });
   } catch (err) {
     console.error('Error saving Z-Report:', err);
     res.status(500).json({ error: 'Failed to save Z-Report: ' + err.message });

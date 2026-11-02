@@ -280,7 +280,7 @@ export const AppProvider = ({ children }) => {
     showToast('Product removed');
   };
 
-  // Z-Report Actions with DB Persistence
+  // Z-Report Actions with DB Persistence & Auto-Cataloging of Products
   const addOrUpdateZReport = async (reportData) => {
     const reportDate = reportData.date || new Date().toISOString().split('T')[0];
     const reportId = reportData.id || `z-${reportDate}-${Date.now().toString().slice(-4)}`;
@@ -297,27 +297,84 @@ export const AppProvider = ({ children }) => {
       uploadedAt: new Date().toISOString()
     };
 
-    // Update local state immediately for instant responsiveness
+    // Update local Z-reports state immediately for instant responsiveness
     setZReports(prev => {
       const filtered = prev.filter(r => r.date !== reportDate);
       return [newReport, ...filtered];
     });
 
+    // Auto-update analytics active month to this report's month
+    const repMonth = reportDate.substring(0, 7);
+    setSelectedAnalyticsMonth(repMonth);
     setSelectedJournalDate(reportDate);
 
-    // Save to real database
+    // Auto-populate / update product catalogue with items from this scanned Z-report
+    let addedOrUpdatedCount = 0;
+    if (reportData.items && Array.isArray(reportData.items) && reportData.items.length > 0) {
+      setProducts(prevProducts => {
+        const prodMap = new Map();
+        prevProducts.forEach(p => prodMap.set((p.name || '').toLowerCase().trim(), { ...p }));
+
+        reportData.items.forEach(item => {
+          const name = (item.productName || item.name || '').trim();
+          if (!name) return;
+          const key = name.toLowerCase();
+          const uPrice = parseFloat(item.unitPrice || item.price) || 0;
+          const hsn = item.hsnCode || item.hsn || '999999';
+          const tax = parseFloat(item.taxRate) || 18;
+          const unit = item.unit || 'pcs';
+
+          if (prodMap.has(key)) {
+            const existing = prodMap.get(key);
+            prodMap.set(key, {
+              ...existing,
+              price: uPrice > 0 ? uPrice : existing.price,
+              hsnCode: hsn !== '999999' ? hsn : existing.hsnCode,
+              taxRate: tax,
+              unit: unit || existing.unit,
+              updatedAt: new Date().toISOString()
+            });
+            addedOrUpdatedCount++;
+          } else {
+            prodMap.set(key, {
+              id: `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+              name,
+              hsnCode: hsn,
+              price: uPrice,
+              costPrice: Math.round(uPrice * 0.7),
+              taxRate: tax,
+              unit,
+              category: 'Scanned Items',
+              stock: 25,
+              updatedAt: new Date().toISOString()
+            });
+            addedOrUpdatedCount++;
+          }
+        });
+
+        const newProductList = Array.from(prodMap.values());
+        localStorage.setItem('retail_products', JSON.stringify(newProductList));
+        return newProductList;
+      });
+    }
+
+    // Save to real database & synchronize updated catalogue
     if (isAuthenticated) {
       try {
         const res = await zReportsApi.save(reportData);
         if (res.report) {
           setZReports(prev => prev.map(r => r.date === reportDate ? res.report : r));
         }
+        if (res.products && Array.isArray(res.products)) {
+          setProducts(res.products);
+          localStorage.setItem('retail_products', JSON.stringify(res.products));
+        }
       } catch (err) {
         console.warn('Stored locally in cache, database sync deferred:', err.message);
       }
     }
 
-    showToast(`EOD Z-Report saved for ${reportDate}! (${shopProfile.currency}${newReport.netSales.toLocaleString()})`);
+    showToast(`Z-Report saved! Catalog updated with ${addedOrUpdatedCount} products.`);
     return newReport;
   };
 

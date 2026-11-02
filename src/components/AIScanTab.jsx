@@ -180,13 +180,13 @@ export const AIScanTab = ({ onOpenSettings }) => {
     });
   };
 
-  const handleConfirmAndSave = () => {
+  const handleConfirmAndSave = async () => {
     if (!extractedZReport || !extractedZReport.items || extractedZReport.items.length === 0) {
       showToast('No items to save.', 'error');
       return;
     }
 
-    const saved = addOrUpdateZReport(extractedZReport);
+    const saved = await addOrUpdateZReport(extractedZReport);
     setSelectedJournalDate(saved.date);
     setActiveTab('daily_journal');
 
@@ -538,6 +538,14 @@ export const AIScanTab = ({ onOpenSettings }) => {
             ))}
           </div>
 
+          {/* Auto-catalog notice */}
+          <div className="flex items-center gap-2 p-2.5 rounded-2xl bg-rust-50 dark:bg-rust-950/40 border border-rust-200/60 dark:border-rust-900/60 text-rust-800 dark:text-rust-300 text-xs">
+            <Sparkles className="w-4 h-4 shrink-0 text-rust-600 dark:text-rust-400" />
+            <span className="text-[11px] leading-tight">
+              <strong>Auto-Catalog Active:</strong> Saving this report will automatically update your store catalog with these {extractedZReport.items.length} products.
+            </span>
+          </div>
+
           {/* Confirm & Save */}
           <div className="space-y-2 pt-1">
             <button
@@ -545,7 +553,7 @@ export const AIScanTab = ({ onOpenSettings }) => {
               className="w-full py-3 rounded-full bg-gradient-to-r from-rust-700 via-rust-600 to-copper-600 hover:from-rust-600 hover:to-copper-500 text-white font-display font-bold text-xs shadow-spray-rust flex items-center justify-center gap-2 transition-all active:scale-[0.98]"
             >
               <Check className="w-4 h-4 stroke-[2.5]" />
-              Confirm & Store in Database
+              Confirm, Log Z-Report & Update Catalog
             </button>
             <button
               onClick={() => {
