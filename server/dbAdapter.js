@@ -144,7 +144,7 @@ export const updateUserProfile = async (id, updates) => {
 // PRODUCTS OPERATIONS
 // -------------------------------------------------------------
 
-export const getProducts = async (userId) => {
+const getRawProducts = async (userId) => {
   if (isSupabaseEnabled()) {
     const { data, error } = await supabase
       .from('products')
@@ -152,7 +152,7 @@ export const getProducts = async (userId) => {
       .eq('user_id', userId)
       .order('name', { ascending: true });
     if (error) throw error;
-    return data.map(p => ({
+    return (data || []).map(p => ({
       id: p.id,
       userId: p.user_id,
       name: p.name,
@@ -184,6 +184,98 @@ export const getProducts = async (userId) => {
         updatedAt: p.updated_at
       }));
   }
+};
+
+export const ensureUserProducts = async (userId) => {
+  const currentProds = await getRawProducts(userId);
+  if (currentProds && currentProds.length > 0) return currentProds;
+
+  // 1. Try backfilling from any Z-reports this user has scanned
+  if (isSupabaseEnabled()) {
+    const { data: items } = await supabase
+      .from('z_report_items')
+      .select('*')
+      .eq('user_id', userId);
+
+    if (items && items.length > 0) {
+      const prodMap = new Map();
+      items.forEach(i => {
+        const name = (i.product_name || '').trim();
+        if (name && !prodMap.has(name.toLowerCase())) {
+          prodMap.set(name.toLowerCase(), {
+            id: `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+            user_id: userId,
+            name,
+            hsn_code: i.hsn_code || '999999',
+            price: parseFloat(i.unit_price) || 0,
+            cost_price: Math.round((parseFloat(i.unit_price) || 0) * 0.7),
+            tax_rate: parseFloat(i.tax_rate) || 18,
+            unit: i.unit || 'pcs',
+            category: 'Scanned Items',
+            stock: 25
+          });
+        }
+      });
+      if (prodMap.size > 0) {
+        await supabase.from('products').insert(Array.from(prodMap.values()));
+        return getRawProducts(userId);
+      }
+    }
+  }
+
+  // 2. Auto-seed based on user's shop name & category
+  const user = await getUserById(userId);
+  const shopNameLower = (user?.shop_name || '').toLowerCase();
+  let starterList = [
+    { name: 'Cotton Crew T-Shirt', hsn: '61091000', price: 499, cost: 260, tax: 5, unit: 'pcs', cat: 'Apparel', stock: 50 },
+    { name: 'Slim Fit Denim Jeans', hsn: '62034200', price: 1499, cost: 790, tax: 12, unit: 'pcs', cat: 'Apparel', stock: 30 },
+    { name: 'Wireless Bluetooth Earbuds', hsn: '85183000', price: 1299, cost: 750, tax: 18, unit: 'pcs', cat: 'Electronics', stock: 30 },
+    { name: 'USB-C Fast Cable 65W', hsn: '85444299', price: 249, cost: 110, tax: 18, unit: 'pcs', cat: 'Electronics', stock: 80 }
+  ];
+
+  if (shopNameLower.includes('matching') || shopNameLower.includes('textile')) {
+    starterList = [
+      { name: '2x2 Premium Cotton Blouse Piece', hsn: '52081190', price: 120, cost: 75, tax: 5, unit: 'pcs', cat: 'Blouse Materials', stock: 120 },
+      { name: 'Rubia Cotton Lining Cloth (1 Mtr)', hsn: '52081290', price: 65, cost: 40, tax: 5, unit: 'mtr', cat: 'Lining & Fabric', stock: 250 },
+      { name: 'Designer Brocade Blouse Piece', hsn: '54075200', price: 250, cost: 150, tax: 5, unit: 'pcs', cat: 'Blouse Materials', stock: 80 },
+      { name: 'Saree Fall & Matching Pico Thread', hsn: '54024400', price: 35, cost: 18, tax: 5, unit: 'pcs', cat: 'Tailoring', stock: 300 },
+      { name: 'Stretchable Ready-to-Wear Cotton Blouse', hsn: '61061000', price: 499, cost: 280, tax: 5, unit: 'pcs', cat: 'Readymade Blouse', stock: 45 },
+      { name: 'Cotton Petticoat / Saree Inskirt', hsn: '62089100', price: 180, cost: 110, tax: 5, unit: 'pcs', cat: 'Inskirts', stock: 75 }
+    ];
+  } else if (shopNameLower.includes('boutique') || shopNameLower.includes('saree') || shopNameLower.includes('fashion')) {
+    starterList = [
+      { name: 'Designer Embroidered Cotton Kurti', hsn: '62042200', price: 1299, cost: 720, tax: 5, unit: 'pcs', cat: 'Ethnic Wear', stock: 35 },
+      { name: 'Pure Handloom Silk Saree with Blouse', hsn: '50072090', price: 2850, cost: 1650, tax: 5, unit: 'pcs', cat: 'Sarees', stock: 25 },
+      { name: 'Chanderi Silk Printed Dupatta', hsn: '62149090', price: 450, cost: 240, tax: 5, unit: 'pcs', cat: 'Dupattas', stock: 50 },
+      { name: 'Raw Silk Unstitched Blouse Piece', hsn: '50072090', price: 380, cost: 210, tax: 5, unit: 'pcs', cat: 'Blouse Pieces', stock: 65 },
+      { name: 'Ankle Length Lycra Cotton Leggings', hsn: '61046200', price: 349, cost: 180, tax: 5, unit: 'pcs', cat: 'Bottom Wear', stock: 80 }
+    ];
+  }
+
+  for (const item of starterList) {
+    await createProduct({
+      id: `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      userId,
+      name: item.name,
+      hsnCode: item.hsn,
+      price: item.price,
+      costPrice: item.cost,
+      taxRate: item.tax,
+      unit: item.unit,
+      category: item.cat,
+      stock: item.stock
+    });
+  }
+
+  return getRawProducts(userId);
+};
+
+export const getProducts = async (userId) => {
+  const prods = await getRawProducts(userId);
+  if (!prods || prods.length === 0) {
+    return ensureUserProducts(userId);
+  }
+  return prods;
 };
 
 export const createProduct = async (productData) => {
