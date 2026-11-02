@@ -91,7 +91,7 @@ const extractJsonFromText = (text) => {
  * Extracts financial totals, products, quantities, prices, and HSN codes
  * when Gemini API encounters a temporary quota/deprecation error.
  */
-export const parseReceiptWithSmartHeuristic = (text = '') => {
+export const parseReceiptWithSmartHeuristic = (text = '', catalogProducts = [], targetDate = '') => {
   const today = new Date().toISOString().split('T')[0];
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
@@ -99,7 +99,7 @@ export const parseReceiptWithSmartHeuristic = (text = '') => {
   let netSales = 0;
   let taxTotal = 0;
   let discount = 0;
-  let date = today;
+  let date = targetDate || today;
   let reportNumber = `Z-${Date.now().toString().slice(-4)}`;
   const items = [];
 
@@ -107,7 +107,7 @@ export const parseReceiptWithSmartHeuristic = (text = '') => {
   const dateMatch = text.match(/\b(20\d\d[-/.]\d\d[-/.]\d\d|\d\d[-/.]\d\d[-/.]20\d\d)\b/);
   if (dateMatch) {
     const rawDate = dateMatch[1].replace(/[/.]/g, '-');
-    date = rawDate.length === 10 ? rawDate : today;
+    date = rawDate.length === 10 ? rawDate : (targetDate || today);
   }
 
   // Extract totals
@@ -122,22 +122,33 @@ export const parseReceiptWithSmartHeuristic = (text = '') => {
 
   // Extract line items
   for (const line of lines) {
-    const itemMatch = line.match(/(?:^|\d+[.)\s]+)(.+?)(?:\s*\(HSN:?\s*(\d+)\))?[:\s-]+(\d+)\s*(?:pcs|kg|unit|pack|bag|jar)?\s*[@*]\s*₹?\$?([0-9,]+(?:\.\d+)?)/i);
+    const itemMatch = line.match(/(?:^|\d+[.)\s]+)(.+?)(?:\s*\(HSN:?\s*(\d+)\))?[:\s-]+(\d+)\s*(?:pcs|kg|mtr|unit|pack|bag|jar)?\s*[@*]\s*₹?\$?([0-9,]+(?:\.\d+)?)/i);
     if (itemMatch) {
-      const name = itemMatch[1].replace(/^[-*•\d.)\s]+/, '').trim();
-      const hsn = itemMatch[2] || '999999';
+      let name = itemMatch[1].replace(/^[-*•\d.)\s]+/, '').trim();
+      let hsn = itemMatch[2] || '999999';
       const qty = parseInt(itemMatch[3]) || 1;
       const rate = parseFloat(itemMatch[4].replace(/,/g, '')) || 0;
       const lineTotal = Math.round(qty * rate);
+
+      // Match against known catalog if available
+      const matched = (catalogProducts || []).find(p => 
+        p.name && (p.name.toLowerCase() === name.toLowerCase() || name.toLowerCase().includes(p.name.toLowerCase()))
+      );
+
+      if (matched) {
+        name = matched.name;
+        hsn = matched.hsnCode || matched.hsn_code || hsn;
+      }
 
       items.push({
         productName: name,
         hsnCode: hsn,
         quantity: qty,
-        unit: 'pcs',
+        unit: matched?.unit || 'pcs',
         unitPrice: rate,
         lineTotal,
-        taxRate: 18
+        taxRate: matched?.taxRate || 18,
+        isNewProduct: !matched
       });
     }
   }
@@ -154,34 +165,32 @@ export const parseReceiptWithSmartHeuristic = (text = '') => {
     closingTime: '21:30',
     storeName: 'Retail Store',
     registerId: 'POS-01',
-    totalItemsSold: items.reduce((acc, i) => acc + i.quantity, 0) || 1,
-    grossSales: grossSales || 15000,
+    totalItemsSold: items.reduce((acc, i) => acc + i.quantity, 0) || (items.length > 0 ? items.length : 1),
+    grossSales: grossSales || 0,
     discount: discount || 0,
-    netSales: netSales || grossSales || 15000,
-    taxTotal: taxTotal || Math.round((netSales || grossSales || 15000) * 0.18),
+    netSales: netSales || grossSales || 0,
+    taxTotal: taxTotal || Math.round((netSales || grossSales || 0) * 0.18),
     paymentBreakdown: {
-      cash: Math.round((netSales || 15000) * 0.4),
-      upi: Math.round((netSales || 15000) * 0.5),
-      card: Math.round((netSales || 15000) * 0.1)
+      cash: Math.round((netSales || 0) * 0.4),
+      upi: Math.round((netSales || 0) * 0.5),
+      card: Math.round((netSales || 0) * 0.1)
     },
-    items: items.length > 0 ? items : [
-      { productName: 'Scanned Retail Item 1', hsnCode: '84716060', quantity: 5, unit: 'pcs', unitPrice: 450, lineTotal: 2250, taxRate: 18 },
-      { productName: 'Scanned Retail Item 2', hsnCode: '61091000', quantity: 3, unit: 'pcs', unitPrice: 499, lineTotal: 1497, taxRate: 5 },
-      { productName: 'Scanned Retail Item 3', hsnCode: '85444299', quantity: 8, unit: 'pcs', unitPrice: 249, lineTotal: 1992, taxRate: 18 }
-    ]
+    items: items
   };
 };
 
 /**
  * Scan and extract End-of-Day Z-Report using Google Gemini with dynamic discovery,
- * multi-endpoint failover, and intelligent fallback parsing.
+ * multi-endpoint failover, and intelligent catalog-guided parsing.
  */
 export const extractZReportWithGemini = async ({
   apiKey: rawKey,
   imageBase64,
   mimeType = 'image/jpeg',
   rawText = '',
-  preferredModel = ''
+  preferredModel = '',
+  catalogProducts = [],
+  targetDate = ''
 }) => {
   const apiKey = sanitizeKey(rawKey);
   if (!apiKey) {
@@ -196,19 +205,51 @@ export const extractZReportWithGemini = async ({
     }
   } catch {}
 
-  const promptText = `
-You are an expert retail accounting AI specializing in POS End-Of-Day (EOD) Z-Reports, daily sales closing sheets, and thermal register receipts.
-Your task is to scan this daily Z-report and extract:
-1. Report metadata: Date of the sales day (YYYY-MM-DD), Z-Report number, POS terminal ID, and store name.
-2. Financial totals: Gross daily sales, Net daily sales, total discounts, total GST/tax, and payment breakdown (cash, upi, card).
-3. Itemized Product Breakdown: Every product sold that day, its HSN/SAC code, quantity sold, unit price, total sales value, and tax rate.
+  // Format the user's current product catalog as a reference guide
+  let catalogGuide = 'No products in catalog yet. Extract products, quantities, rates, and infer standard Indian GST HSN codes.';
+  if (Array.isArray(catalogProducts) && catalogProducts.length > 0) {
+    catalogGuide = catalogProducts.map((p, idx) => 
+      `${idx + 1}. "${p.name}" | HSN: ${p.hsnCode || p.hsn_code || '999999'} | Category: ${p.category || 'General'} | Unit: ${p.unit || 'pcs'} | Ref Rate: ₹${p.price || 0}`
+    ).join('\n');
+  }
 
-Return ONLY a raw JSON object matching this exact schema:
+  const promptText = `
+You are an expert retail accounting AI specializing in analyzing POS End-Of-Day (EOD) Z-Reports, daily closing balance slips, and thermal cash register receipts.
+
+CURRENT STORE PRODUCT CATALOG (REFERENCE GUIDE):
+Use this store catalog as a guide to:
+- Resolve noisy OCR, camera blur, angled perspectives, abbreviations, and truncated item descriptions (e.g. "Bls Pc" -> "Blouse Piece").
+- Match correct official Indian GST HSN/SAC codes and standard units (pcs, mtr, kg, gm, etc.).
+- Identify whether an item on the receipt is already in the store catalog or is a brand-new product.
+
+STORE CATALOG:
+${catalogGuide}
+
+${targetDate ? `TARGET SALES DATE CONTEXT: The user requested to log this report for date: ${targetDate}. If the receipt shows a clear printed sales date, extract that printed date. If the date is missing, blurry, or matches, use "${targetDate}".` : ''}
+
+CRITICAL EXTRACTION MANDATES:
+1. MANDATORY ITEM EXTRACTION:
+   - Thermal Z-reports and daily slips typically list products sold in tables, department summaries, PLU blocks, or line item sections (e.g., "DEPARTMENT SALES", "PLU SALES", "COMMODITIES", "ITEM SALES", "DAILY SUMMARY").
+   - YOU MUST READ EVERY ROW, ITEM, COMMODITY, OR PLU SOLD AND POPULATE THE "items" ARRAY.
+   - DO NOT LEAVE THE "items" ARRAY EMPTY! If there are products or commodities listed on this receipt, extract each one with its quantity, unit, unit rate, line total, and HSN code.
+   - If quantities or rates are visible, extract them precisely. If quantity is omitted on a line item, default to 1.
+2. FINANCIAL TOTALS RECONCILIATION:
+   - Extract Gross daily sales, Net daily sales, GST/Tax total, discounts, and payment methods (Cash, UPI/QR, Card/POS).
+   - Verify that Gross Sales equals or approximates the sum of line totals minus discounts.
+3. HSN / SAC CODES:
+   - Extract the 4, 6, or 8 digit HSN code from the bill if printed.
+   - If missing on the bill, match the item to the STORE CATALOG above and use its HSN code.
+   - If not in catalog, infer the standard Indian GST HSN code (e.g. 5208 for cotton textiles, 6204 for dresses/kurtis, 8518 for audio electronics, 8544 for cables, 1006 for rice, etc.).
+4. NEW PRODUCT DISCOVERY FLAG:
+   - For every item in "items", set "isNewProduct": true if the product is NOT found in the STORE CATALOG above.
+   - Set "isNewProduct": false if it matches an existing catalog item.
+
+Return ONLY a raw, valid JSON object matching this exact schema:
 {
   "reportType": "z_report",
-  "reportNumber": "string (e.g. Z-0048 or auto-generate Z-YYYYMMDD)",
-  "date": "YYYY-MM-DD (the exact date the sales took place)",
-  "closingTime": "HH:MM or 21:00",
+  "reportNumber": "string (e.g. Z-0048 or auto-generated from date)",
+  "date": "YYYY-MM-DD",
+  "closingTime": "HH:MM (e.g. 21:30)",
   "storeName": "string",
   "registerId": "string (e.g. POS-01)",
   "totalItemsSold": number (total units of all products sold),
@@ -224,18 +265,18 @@ Return ONLY a raw JSON object matching this exact schema:
   "items": [
     {
       "productName": "Clean and exact name of product",
-      "hsnCode": "4, 6, or 8 digit HSN/SAC code (extract if visible, or infer standard Indian GST HSN code for this product category)",
-      "quantity": number (total quantity sold on this date),
-      "unit": "pcs | kg | jar | bag | box | mtr",
-      "unitPrice": number (rate per unit),
-      "lineTotal": number (quantity * unitPrice),
-      "taxRate": number (e.g. 0, 5, 12, 18, 28)
+      "hsnCode": "4, 6, or 8 digit HSN/SAC code",
+      "quantity": number,
+      "unit": "pcs | mtr | kg | gm | pkt | box | pair | set",
+      "unitPrice": number,
+      "lineTotal": number,
+      "taxRate": number,
+      "isNewProduct": boolean
     }
   ]
 }
 
-Important Rules:
-- If HSN codes are not explicitly printed, infer standard 4-8 digit Indian GST HSN codes based on product category.
+Strict Rules:
 - All numbers must be clean numeric values, not strings.
 - Output ONLY valid JSON, do NOT add introductory or conversational text.
 `;
@@ -374,7 +415,7 @@ Important Rules:
   // Fallback to built-in smart receipt parser so user workflow is never blocked
   console.warn('Gemini API calls failed with:', lastError?.message);
   console.warn('Falling back to built-in smart receipt parser.');
-  const fallbackResult = parseReceiptWithSmartHeuristic(rawText || '');
+  const fallbackResult = parseReceiptWithSmartHeuristic(rawText || '', catalogProducts, targetDate);
   fallbackResult.isFallback = true;
   fallbackResult.fallbackReason = lastError?.message || 'Google Gemini service was unavailable.';
   return fallbackResult;

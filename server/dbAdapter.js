@@ -696,13 +696,41 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
   }
 };
 
-export const deleteZReport = async (id, userId) => {
+export const deleteZReport = async (idOrDate, userId) => {
   if (isSupabaseEnabled()) {
-    const { error } = await supabase.from('z_reports').delete().eq('id', id).eq('user_id', userId);
-    if (error) throw error;
+    const isDate = /^\d{4}-\d{2}-\d{2}$/.test(idOrDate);
+    let reportId = idOrDate;
+    if (isDate) {
+      const { data: rep } = await supabase
+        .from('z_reports')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('date', idOrDate)
+        .maybeSingle();
+      if (rep) reportId = rep.id;
+    }
+
+    // Always delete line items first
+    await supabase.from('z_report_items').delete().eq('z_report_id', reportId);
+    if (isDate) {
+      const { error } = await supabase.from('z_reports').delete().eq('user_id', userId).eq('date', idOrDate);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('z_reports').delete().eq('id', reportId).eq('user_id', userId);
+      if (error) throw error;
+    }
   } else {
-    db.prepare('DELETE FROM z_report_items WHERE z_report_id = ? AND user_id = ?').run(id, userId);
-    db.prepare('DELETE FROM z_reports WHERE id = ? AND user_id = ?').run(id, userId);
+    const isDate = /^\d{4}-\d{2}-\d{2}$/.test(idOrDate);
+    if (isDate) {
+      const rep = db.prepare('SELECT id FROM z_reports WHERE user_id = ? AND date = ?').get(userId, idOrDate);
+      if (rep) {
+        db.prepare('DELETE FROM z_report_items WHERE z_report_id = ?').run(rep.id);
+        db.prepare('DELETE FROM z_reports WHERE id = ?').run(rep.id);
+      }
+    } else {
+      db.prepare('DELETE FROM z_report_items WHERE z_report_id = ?').run(idOrDate);
+      db.prepare('DELETE FROM z_reports WHERE id = ? AND user_id = ?').run(idOrDate, userId);
+    }
   }
 };
 

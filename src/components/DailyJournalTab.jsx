@@ -8,8 +8,27 @@ import {
   Camera, 
   Trash2,
   Clock,
-  Printer
+  Printer,
+  RefreshCw,
+  AlertTriangle
 } from 'lucide-react';
+
+// Robust local date formatting helpers (prevents UTC timezone shift)
+const formatLocalDate = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const parseLocalDate = (dateStr) => {
+  if (!dateStr) return new Date();
+  const parts = dateStr.split('-').map(Number);
+  if (parts.length === 3) {
+    return new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0); // Noon local time avoids midnight rollover
+  }
+  return new Date();
+};
 
 export const DailyJournalTab = () => {
   const { 
@@ -22,31 +41,32 @@ export const DailyJournalTab = () => {
   } = useApp();
 
   const changeDate = (days) => {
-    const cur = new Date(selectedJournalDate);
+    const cur = parseLocalDate(selectedJournalDate);
     cur.setDate(cur.getDate() + days);
-    setSelectedJournalDate(cur.toISOString().split('T')[0]);
+    setSelectedJournalDate(formatLocalDate(cur));
   };
 
   const setToday = () => {
-    setSelectedJournalDate(new Date().toISOString().split('T')[0]);
+    setSelectedJournalDate(formatLocalDate(new Date()));
   };
 
   const currentReport = zReports.find(r => r.date === selectedJournalDate);
 
-  const dateObj = new Date(selectedJournalDate + 'T00:00:00');
-  const formattedDisplay = dateObj.toLocaleDateString('en-US', {
+  const curDateObj = parseLocalDate(selectedJournalDate);
+  const formattedDisplay = curDateObj.toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
     year: 'numeric'
   });
 
-  const isToday = selectedJournalDate === new Date().toISOString().split('T')[0];
+  const todayStr = formatLocalDate(new Date());
+  const isToday = selectedJournalDate === todayStr;
 
   const dateStrip = [-3, -2, -1, 0, 1, 2, 3].map(offset => {
-    const d = new Date(dateObj);
+    const d = new Date(curDateObj);
     d.setDate(d.getDate() + offset);
-    const dateStr = d.toISOString().split('T')[0];
+    const dateStr = formatLocalDate(d);
     const hasReport = zReports.some(r => r.date === dateStr);
     return {
       dateStr,
@@ -246,48 +266,64 @@ export const DailyJournalTab = () => {
               ))}
             </div>
 
-            {/* Actions */}
-            <div className="pt-2 flex items-center justify-between border-t border-neutral-100 dark:border-zinc-800/80 text-xs">
-              <span className="text-[10px] text-neutral-600 dark:text-zinc-400">
-                Logged: {new Date(currentReport.uploadedAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </span>
-              <button
-                onClick={() => {
-                  if (confirm(`Delete Z-Report for ${selectedJournalDate}?`)) {
-                    deleteZReport(currentReport.id);
-                  }
-                }}
-                className="text-[10px] text-red-500 hover:text-red-700 font-medium flex items-center gap-1"
-              >
-                <Trash2 className="w-3 h-3" />
-                Remove
-              </button>
+            {/* Actions: Re-upload and Delete */}
+            <div className="pt-3 border-t border-neutral-100 dark:border-zinc-800/80 space-y-2">
+              <div className="flex items-center justify-between text-xs text-neutral-500 dark:text-zinc-400">
+                <span className="text-[10px]">
+                  Logged: {new Date(currentReport.uploadedAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" /> Active Record
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  onClick={() => setActiveTab('ai_scan')}
+                  className="py-2 px-3 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-zinc-800 dark:hover:bg-zinc-750 text-neutral-800 dark:text-zinc-200 font-display font-semibold text-xs flex items-center justify-center gap-1.5 transition-all border border-neutral-200/80 dark:border-zinc-700 active:scale-95"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-rust-600 dark:text-rust-400" />
+                  Re-upload Report
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (confirm(`Permanently delete the Z-Report for ${formattedDisplay}?\n\nThis will remove the report and its line items. You will be able to re-upload a new scan for this date anytime.`)) {
+                      deleteZReport(currentReport.id || selectedJournalDate);
+                    }
+                  }}
+                  className="py-2 px-3 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 font-display font-semibold text-xs flex items-center justify-center gap-1.5 transition-all border border-red-200 dark:border-red-800/50 active:scale-95"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                  Delete Permanently
+                </button>
+              </div>
             </div>
           </div>
         </div>
       ) : (
         /* Empty State */
         <div className="bg-white dark:bg-zinc-900 rounded-3xl p-8 border border-neutral-200/80 dark:border-zinc-800/80 text-center space-y-3">
-          <div className="w-12 h-12 rounded-2xl bg-neutral-100 dark:bg-zinc-800 text-neutral-500 dark:text-zinc-400 flex items-center justify-center mx-auto">
+          <div className="w-12 h-12 rounded-2xl bg-rust-50 dark:bg-rust-950/60 border border-rust-200 dark:border-rust-800/60 text-rust-600 dark:text-rust-400 flex items-center justify-center mx-auto shadow-spray-rust">
             <Calendar className="w-5 h-5 stroke-[1.8]" />
           </div>
 
           <div>
             <h3 className="font-display font-bold text-sm text-neutral-900 dark:text-neutral-100">
-              No EOD Report for {formattedDisplay}
+              No Report Logged for {formattedDisplay}
             </h3>
             <p className="text-xs text-neutral-600 dark:text-zinc-400 mt-1 max-w-xs mx-auto">
-              Scan today's cash register Z-Report to automatically store itemized sales.
+              Click below to scan or upload the cash register Z-Report specifically for this date.
             </p>
           </div>
 
           <div className="pt-2 max-w-xs mx-auto">
             <button
               onClick={() => setActiveTab('ai_scan')}
-              className="w-full py-2.5 rounded-full bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-display font-semibold text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
+              className="w-full py-2.5 rounded-full bg-gradient-to-r from-rust-700 via-rust-600 to-copper-600 hover:from-rust-600 hover:to-copper-500 text-white font-display font-semibold text-xs flex items-center justify-center gap-2 shadow-spray-rust transition-all active:scale-95"
             >
               <Camera className="w-3.5 h-3.5" />
-              Scan Z-Report
+              Upload Report for {curDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
             </button>
           </div>
         </div>

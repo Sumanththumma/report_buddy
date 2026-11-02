@@ -17,7 +17,8 @@ import {
   Tag,
   PackagePlus,
   Layers,
-  Info
+  Info,
+  Calendar
 } from 'lucide-react';
 import { 
   fileToBase64, 
@@ -138,7 +139,9 @@ export const AIScanTab = ({ onOpenSettings }) => {
           apiKey: geminiApiKey,
           imageBase64: rawB64,
           mimeType: mime,
-          preferredModel: modelToUse
+          preferredModel: modelToUse,
+          catalogProducts: products,
+          targetDate: selectedJournalDate
         });
       } else if (overrideText || rawText.trim()) {
         const textToProcess = overrideText || rawText.trim();
@@ -147,21 +150,23 @@ export const AIScanTab = ({ onOpenSettings }) => {
             data = await extractZReportWithGemini({
               apiKey: geminiApiKey,
               rawText: textToProcess,
-              preferredModel: modelToUse
+              preferredModel: modelToUse,
+              catalogProducts: products,
+              targetDate: selectedJournalDate
             });
           } catch (aiErr) {
             console.warn('AI scan failed, falling back to heuristic parser:', aiErr.message);
-            data = parseReceiptWithSmartHeuristic(textToProcess);
+            data = parseReceiptWithSmartHeuristic(textToProcess, products, selectedJournalDate);
           }
         } else {
-          data = parseReceiptWithSmartHeuristic(textToProcess);
+          data = parseReceiptWithSmartHeuristic(textToProcess, products, selectedJournalDate);
         }
       } else {
         throw new Error('Please select a receipt image or paste text to scan.');
       }
 
-      if (!data.date) {
-        data.date = selectedJournalDate;
+      if (!data.date || selectedJournalDate) {
+        data.date = selectedJournalDate || data.date;
       }
 
       setExtractedZReport(data);
@@ -191,13 +196,34 @@ export const AIScanTab = ({ onOpenSettings }) => {
 
   const handleSmartFallback = () => {
     // If user's key failed, parse sample or fallback
-    const fallbackData = parseReceiptWithSmartHeuristic(rawText || 'Daily Sales Z-Report Total: 19800');
+    const fallbackData = parseReceiptWithSmartHeuristic(rawText || 'Daily Sales Z-Report Total: 19800', products, selectedJournalDate);
     setExtractedZReport(fallbackData);
     const discovered = detectNewProducts(fallbackData.items);
     setNewProductsConfig(discovered);
     setScanError(null);
     setHighlightEmptyCategories(false);
     showToast('Extracted with Smart Heuristic parser. Please verify items.');
+  };
+
+  const handleAddNewItem = () => {
+    if (!extractedZReport) return;
+    const newItem = {
+      productName: '',
+      hsnCode: '999999',
+      quantity: 1,
+      unit: 'pcs',
+      unitPrice: 0,
+      lineTotal: 0,
+      taxRate: 18,
+      isNewProduct: true
+    };
+    const updatedItems = [...(extractedZReport.items || []), newItem];
+    setExtractedZReport({
+      ...extractedZReport,
+      items: updatedItems
+    });
+    const discovered = detectNewProducts(updatedItems);
+    setNewProductsConfig(discovered);
   };
 
   const handleUpdateItem = (index, field, value) => {
@@ -295,6 +321,35 @@ export const AIScanTab = ({ onOpenSettings }) => {
 
   return (
     <div className="space-y-4 pb-24 animate-fade-in">
+      {/* Target Sales Date Selector Banner */}
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl p-3 border border-neutral-200/80 dark:border-zinc-800/80 flex items-center justify-between shadow-2xs">
+        <div className="flex items-center space-x-2.5">
+          <div className="w-8 h-8 rounded-xl bg-rust-50 dark:bg-rust-950/60 border border-rust-200 dark:border-rust-800/60 flex items-center justify-center text-rust-600 dark:text-rust-400">
+            <Calendar className="w-4 h-4" />
+          </div>
+          <div>
+            <span className="text-[10px] uppercase font-bold text-neutral-400 dark:text-zinc-500 tracking-wider block">
+              Z-Report Sales Date
+            </span>
+            <span className="text-xs font-display font-bold text-neutral-900 dark:text-neutral-100">
+              {selectedJournalDate}
+            </span>
+          </div>
+        </div>
+
+        <input
+          type="date"
+          value={selectedJournalDate}
+          onChange={(e) => {
+            setSelectedJournalDate(e.target.value);
+            if (extractedZReport) {
+              setExtractedZReport(prev => ({ ...prev, date: e.target.value }));
+            }
+          }}
+          className="font-display text-xs font-bold bg-neutral-100 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 text-neutral-900 dark:text-neutral-100 px-2.5 py-1.5 rounded-xl outline-none cursor-pointer focus:border-rust-500"
+        />
+      </div>
+
       {/* Mode Selector Pill Bar */}
       <div className="bg-white dark:bg-zinc-900 rounded-2xl p-1 border border-neutral-200/80 dark:border-zinc-800/80 flex shadow-2xs">
         <button
@@ -768,12 +823,46 @@ export const AIScanTab = ({ onOpenSettings }) => {
           {/* Itemized List */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100">
-                Itemized Sales on Report ({extractedZReport.items?.length || 0})
-              </span>
+              <div>
+                <span className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 block">
+                  Itemized Sales on Report ({extractedZReport.items?.length || 0})
+                </span>
+                <span className="text-[10px] text-neutral-500 dark:text-zinc-400">
+                  Products and HSN codes from cash register bill
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddNewItem}
+                className="px-2.5 py-1 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-zinc-800 dark:hover:bg-zinc-750 text-neutral-800 dark:text-zinc-200 font-display font-semibold text-[11px] flex items-center gap-1 border border-neutral-200/80 dark:border-zinc-700 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5 text-rust-600 dark:text-rust-400" />
+                Add Item
+              </button>
             </div>
 
-            {extractedZReport.items?.map((item, idx) => {
+            {(!extractedZReport.items || extractedZReport.items.length === 0) ? (
+              <div className="p-5 rounded-2xl border border-dashed border-amber-300 dark:border-amber-700/60 bg-amber-50/40 dark:bg-amber-950/20 text-center space-y-2.5">
+                <AlertCircle className="w-6 h-6 text-amber-600 dark:text-amber-400 mx-auto" />
+                <div>
+                  <p className="text-xs font-bold text-neutral-900 dark:text-neutral-100">
+                    No itemized products detected on this receipt
+                  </p>
+                  <p className="text-[11px] text-neutral-600 dark:text-zinc-400 mt-0.5">
+                    Click the button below to add the products and HSN codes from this bill.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddNewItem}
+                  className="px-3.5 py-1.5 rounded-full bg-gradient-to-r from-rust-700 to-copper-600 text-white font-display font-bold text-xs shadow-spray-rust inline-flex items-center gap-1.5 transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  + Add Product from Bill
+                </button>
+              </div>
+            ) : (
+              extractedZReport.items.map((item, idx) => {
               const itemName = (item.productName || item.name || '').trim().toLowerCase();
               const isExisting = existingCatalogNames.has(itemName);
               const newProdConfig = newProductsConfig.find(p => p.originalName?.toLowerCase() === itemName);
@@ -851,7 +940,7 @@ export const AIScanTab = ({ onOpenSettings }) => {
                   </div>
                 </div>
               );
-            })}
+            }))}
           </div>
 
           {/* Confirm & Save */}

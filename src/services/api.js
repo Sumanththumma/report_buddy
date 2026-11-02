@@ -91,6 +91,9 @@ export const zReportsApi = {
   }),
   delete: (id) => request(`/z-reports/${id}`, {
     method: 'DELETE'
+  }),
+  deleteByDate: (date) => request(`/z-reports/date/${date}`, {
+    method: 'DELETE'
   })
 };
 

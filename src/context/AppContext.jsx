@@ -390,16 +390,31 @@ export const AppProvider = ({ children }) => {
     return newReport;
   };
 
-  const deleteZReport = async (reportId) => {
-    setZReports(prev => prev.filter(r => r.id !== reportId));
+  const deleteZReport = async (reportIdOrDate) => {
+    const reportToDelete = zReports.find(r => r.id === reportIdOrDate || r.date === reportIdOrDate);
+    const targetDate = reportToDelete?.date || (typeof reportIdOrDate === 'string' && reportIdOrDate.length === 10 ? reportIdOrDate : null);
+
+    setZReports(prev => prev.filter(r => r.id !== reportIdOrDate && r.date !== reportIdOrDate));
+    
+    // Update local cache
+    try {
+      const stored = JSON.parse(localStorage.getItem('retail_z_reports') || '[]');
+      const filtered = stored.filter(r => r.id !== reportIdOrDate && r.date !== reportIdOrDate);
+      localStorage.setItem('retail_z_reports', JSON.stringify(filtered));
+    } catch {}
+
     if (isAuthenticated) {
       try {
-        await zReportsApi.delete(reportId);
+        if (targetDate) {
+          await zReportsApi.deleteByDate(targetDate);
+        } else {
+          await zReportsApi.delete(reportIdOrDate);
+        }
       } catch (err) {
         console.warn('Deleted locally, remote DB sync deferred:', err.message);
       }
     }
-    showToast('Z-Report entry deleted');
+    showToast(`Z-Report for ${targetDate || 'selected day'} permanently deleted.`);
   };
 
   const updateGeminiApiKey = async (newKey, preferredModel) => {

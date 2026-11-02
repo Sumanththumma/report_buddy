@@ -496,7 +496,7 @@ app.post('/api/z-reports', requireAuth, async (req, res) => {
   }
 });
 
-// Delete Z-Report
+// Delete Z-Report by ID
 app.delete('/api/z-reports/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
@@ -504,6 +504,17 @@ app.delete('/api/z-reports/:id', requireAuth, async (req, res) => {
     res.json({ message: 'Z-Report deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete report: ' + err.message });
+  }
+});
+
+// Delete Z-Report by Date
+app.delete('/api/z-reports/date/:date', requireAuth, async (req, res) => {
+  try {
+    const { date } = req.params;
+    await dbAdapter.deleteZReport(date, req.user.id);
+    res.json({ message: `Z-Report for ${date} deleted successfully` });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete report for date: ' + err.message });
   }
 });
 
