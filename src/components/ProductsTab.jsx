@@ -14,14 +14,6 @@ import {
   Sparkles
 } from 'lucide-react';
 
-const COMMON_HSN_CATEGORIES = [
-  { label: 'All', value: 'ALL' },
-  { label: 'Electronics', value: 'Electronics' },
-  { label: 'Apparel', value: 'Apparel' },
-  { label: 'Groceries', value: 'Groceries' },
-  { label: 'Home & Kitchen', value: 'Home & Kitchen' },
-];
-
 export const ProductsTab = () => {
   const { products, addProduct, updateProduct, deleteProduct, shopProfile, setActiveTab } = useApp();
 
@@ -29,6 +21,10 @@ export const ProductsTab = () => {
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+
+  // Dynamic categories computed from user's authentic products
+  const categoryList = Array.from(new Set(products.map(p => (p.category || 'General').trim()).filter(Boolean)));
+  const availableCategories = ['ALL', ...categoryList];
 
   // Form State
   const [formData, setFormData] = useState({
@@ -98,12 +94,17 @@ export const ProductsTab = () => {
       <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 border border-neutral-200/80 dark:border-zinc-800/80 shadow-2xs space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="font-display font-bold text-sm text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5">
-              <Package className="w-4 h-4 text-neutral-600 dark:text-zinc-400 stroke-[2]" />
-              Products Catalog
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="font-display font-bold text-sm text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5">
+                <Package className="w-4 h-4 text-rust-600 dark:text-rust-400 stroke-[2]" />
+                Products Catalog
+              </h2>
+              <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50">
+                Holy Grail Master
+              </span>
+            </div>
             <p className="text-[11px] text-neutral-600 dark:text-zinc-400 font-medium mt-0.5">
-              {products.length} registered item{products.length === 1 ? '' : 's'} with GST HSN codes
+              {products.length} registered item{products.length === 1 ? '' : 's'} • Authoritative reference for HSN, GST & variety merges
             </p>
           </div>
 
@@ -128,19 +129,19 @@ export const ProductsTab = () => {
           <Search className="w-3.5 h-3.5 text-neutral-500 dark:text-zinc-400 absolute left-2.5 top-2.5" />
         </div>
 
-        {/* Category Pills */}
+        {/* Dynamic Category Pills based on store's actual products */}
         <div className="flex space-x-1.5 overflow-x-auto no-scrollbar pt-0.5">
-          {COMMON_HSN_CATEGORIES.map(cat => (
+          {availableCategories.map(cat => (
             <button
-              key={cat.value}
-              onClick={() => setSelectedCategory(cat.value)}
+              key={cat}
+              onClick={() => setSelectedCategory(cat)}
               className={`px-2.5 py-1 rounded-full text-[11px] font-display font-semibold whitespace-nowrap transition-all ${
-                selectedCategory === cat.value
+                selectedCategory === cat
                   ? 'bg-gradient-to-r from-rust-700 to-copper-600 text-white shadow-spray-rust'
                   : 'bg-neutral-100 text-neutral-600 dark:bg-zinc-800 dark:text-zinc-400 hover:text-neutral-900 dark:hover:text-zinc-200'
               }`}
             >
-              {cat.label}
+              {cat === 'ALL' ? 'All Items' : cat}
             </button>
           ))}
         </div>
@@ -321,20 +322,28 @@ export const ProductsTab = () => {
 
                 <div>
                   <label className="block text-[10px] font-semibold text-neutral-500 dark:text-zinc-400 uppercase mb-1">
-                    Category
+                    Category *
                   </label>
-                  <select
+                  <input
+                    type="text"
+                    list="product-category-suggestions"
+                    required
                     value={formData.category}
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-xl px-2.5 py-2 text-neutral-900 dark:text-zinc-100 outline-none"
-                  >
-                    <option value="Electronics">Electronics</option>
-                    <option value="Apparel">Apparel</option>
-                    <option value="Groceries">Groceries</option>
-                    <option value="Home & Kitchen">Home & Kitchen</option>
-                    <option value="Stationery">Stationery</option>
-                    <option value="General">General Retail</option>
-                  </select>
+                    placeholder="e.g. Sarees & Fabrics, Blouse Materials..."
+                    className="w-full bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-xl px-2.5 py-2 text-neutral-900 dark:text-zinc-100 font-semibold text-xs outline-none focus:border-rust-500"
+                  />
+                  <datalist id="product-category-suggestions">
+                    {categoryList.map(c => <option key={c} value={c} />)}
+                    <option value="Sarees & Fabrics" />
+                    <option value="Blouse Materials" />
+                    <option value="Ethnic Wear" />
+                    <option value="Apparel" />
+                    <option value="Groceries" />
+                    <option value="Electronics" />
+                    <option value="General Retail" />
+                  </datalist>
+                  <span className="text-[9px] text-neutral-400 dark:text-zinc-500 mt-0.5 block">Type custom or pick above</span>
                 </div>
               </div>
 

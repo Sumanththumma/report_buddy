@@ -504,38 +504,56 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
     }]);
     if (repErr) throw repErr;
 
+    // Fetch existing catalog products to uphold the Holy Grail principle
+    const { data: existingProds } = await supabase
+      .from('products')
+      .select('id, name, price, stock, hsn_code, category, unit, tax_rate')
+      .eq('user_id', reportData.userId);
+
+    const prodMap = new Map();
+    (existingProds || []).forEach(p => prodMap.set((p.name || '').toLowerCase().trim(), p));
+
     if (items.length > 0) {
-      const formattedItems = items.map(i => ({
-        id: i.id || `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        z_report_id: reportData.id,
-        user_id: reportData.userId,
-        product_name: i.productName || i.name,
-        hsn_code: i.hsnCode || i.hsn || '999999',
-        quantity: parseInt(i.quantity || i.qty) || 1,
-        unit: i.unit || 'pcs',
-        unit_price: parseFloat(i.unitPrice || i.price) || 0,
-        line_total: parseFloat(i.lineTotal || i.total) || 0,
-        tax_rate: parseFloat(i.taxRate) || 18
-      }));
+      const formattedItems = items.map(i => {
+        const rawName = (i.productName || i.name || '').trim();
+        const key = rawName.toLowerCase();
+        // Holy Grail: Inherit curated details (HSN, GST rate, Unit) from catalog if product matches
+        const catalogMatch = prodMap.get(key);
+        const resolvedName = catalogMatch ? catalogMatch.name : (rawName || 'Item');
+        const resolvedHsn = catalogMatch?.hsn_code || i.hsnCode || i.hsn || '999999';
+        const resolvedTax = catalogMatch?.tax_rate ?? (parseFloat(i.taxRate) || 18);
+        const resolvedUnit = catalogMatch?.unit || i.unit || 'pcs';
+
+        return {
+          id: i.id || `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+          z_report_id: reportData.id,
+          user_id: reportData.userId,
+          product_name: resolvedName,
+          hsn_code: resolvedHsn,
+          quantity: parseInt(i.quantity || i.qty) || 1,
+          unit: resolvedUnit,
+          unit_price: parseFloat(i.unitPrice || i.price) || 0,
+          line_total: parseFloat(i.lineTotal || i.total) || 0,
+          tax_rate: resolvedTax
+        };
+      });
       const { error: itemErr } = await supabase.from('z_report_items').insert(formattedItems);
       if (itemErr) throw itemErr;
     }
 
     // Process user-reviewed / manually categorized new products
+    // Holy Grail Principle: Existing catalog products must never be overwritten or modified by receipt scans!
+    // Only genuinely new items (not merged into existing varieties) get inserted into the catalog.
     if (configuredProducts.length > 0) {
-      const { data: existingProds } = await supabase
-        .from('products')
-        .select('id, name, price, stock, hsn_code, category')
-        .eq('user_id', reportData.userId);
-
-      const prodMap = new Map();
-      (existingProds || []).forEach(p => prodMap.set((p.name || '').toLowerCase().trim(), p));
-
       for (const prod of configuredProducts) {
-        if (prod.addToCatalog === false) continue;
+        if (prod.addToCatalog === false || prod.action === 'merge') continue;
         const prodName = (prod.name || prod.productName || '').trim();
         if (!prodName) continue;
         const key = prodName.toLowerCase();
+
+        // If it already exists in the catalog, DO NOT alter its details (Holy Grail)
+        if (prodMap.has(key)) continue;
+
         const uPrice = parseFloat(prod.price || prod.unitPrice) || 0;
         const cPrice = parseFloat(prod.costPrice) || Math.round(uPrice * 0.7);
         const hsn = prod.hsnCode || prod.hsn || '999999';
@@ -544,33 +562,20 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
         const category = (prod.category || 'General').trim();
         const stock = parseInt(prod.stock) || 50;
 
-        if (prodMap.has(key)) {
-          const match = prodMap.get(key);
-          await supabase.from('products').update({
-            price: uPrice > 0 ? uPrice : match.price,
-            cost_price: cPrice > 0 ? cPrice : match.cost_price,
-            hsn_code: hsn !== '999999' ? hsn : match.hsn_code,
-            tax_rate: tax,
-            unit: unit || match.unit,
-            category: category || match.category,
-            updated_at: new Date().toISOString()
-          }).eq('id', match.id);
-        } else {
-          const newProdId = `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-          await supabase.from('products').insert([{
-            id: newProdId,
-            user_id: reportData.userId,
-            name: prodName,
-            hsn_code: hsn,
-            price: uPrice,
-            cost_price: cPrice,
-            tax_rate: tax,
-            unit,
-            category,
-            stock
-          }]);
-          prodMap.set(key, { id: newProdId, name: prodName, price: uPrice, hsn_code: hsn, category });
-        }
+        const newProdId = `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+        await supabase.from('products').insert([{
+          id: newProdId,
+          user_id: reportData.userId,
+          name: prodName,
+          hsn_code: hsn,
+          price: uPrice,
+          cost_price: cPrice,
+          tax_rate: tax,
+          unit,
+          category,
+          stock
+        }]);
+        prodMap.set(key, { id: newProdId, name: prodName, price: uPrice, hsn_code: hsn, category, unit, tax_rate: tax });
       }
     }
 
@@ -608,17 +613,25 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
       reportData.notes
     );
 
+    // Fetch existing catalog products for SQLite to uphold Holy Grail
+    const existingProds = db.prepare('SELECT id, name, price, stock, hsn_code, category, unit, tax_rate FROM products WHERE user_id = ?').all(reportData.userId);
+    const prodMap = new Map();
+    existingProds.forEach(p => prodMap.set((p.name || '').toLowerCase().trim(), p));
+
     const insertItem = db.prepare(`
       INSERT INTO z_report_items (id, z_report_id, user_id, product_name, hsn_code, quantity, unit, unit_price, line_total, tax_rate)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const item of items) {
-      const prodName = (item.productName || item.name || '').trim();
+      const rawName = (item.productName || item.name || '').trim();
+      const key = rawName.toLowerCase();
+      const catalogMatch = prodMap.get(key);
+      const resolvedName = catalogMatch ? catalogMatch.name : (rawName || 'Item');
+      const resolvedHsn = catalogMatch?.hsn_code || item.hsnCode || item.hsn || '999999';
+      const resolvedTax = catalogMatch?.tax_rate ?? (parseFloat(item.taxRate) || 18);
+      const resolvedUnit = catalogMatch?.unit || item.unit || 'pcs';
       const uPrice = parseFloat(item.unitPrice || item.price) || 0;
-      const hsn = item.hsnCode || item.hsn || '999999';
-      const tax = parseFloat(item.taxRate) || 18;
-      const unit = item.unit || 'pcs';
       const qty = parseInt(item.quantity || item.qty) || 1;
       const lTotal = parseFloat(item.lineTotal || item.total) || 0;
 
@@ -626,36 +639,31 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
         item.id || `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         reportData.id,
         reportData.userId,
-        prodName || 'Item',
-        hsn,
+        resolvedName,
+        resolvedHsn,
         qty,
-        unit,
+        resolvedUnit,
         uPrice,
         lTotal,
-        tax
+        resolvedTax
       );
     }
 
     // Process user-reviewed / manually categorized new products for SQLite
+    // Holy Grail: DO NOT overwrite existing products. Only insert genuinely new items.
     if (configuredProducts.length > 0) {
-      const findProd = db.prepare(`
-        SELECT id, price, hsn_code, category FROM products 
-        WHERE user_id = ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))
-      `);
-      const updateExisting = db.prepare(`
-        UPDATE products 
-        SET price = ?, cost_price = ?, hsn_code = ?, tax_rate = ?, unit = ?, category = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `);
       const insertNewProd = db.prepare(`
         INSERT INTO products (id, user_id, name, hsn_code, price, cost_price, tax_rate, unit, category, stock)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
 
       for (const prod of configuredProducts) {
-        if (prod.addToCatalog === false) continue;
+        if (prod.addToCatalog === false || prod.action === 'merge') continue;
         const prodName = (prod.name || prod.productName || '').trim();
         if (!prodName) continue;
+        const key = prodName.toLowerCase();
+        if (prodMap.has(key)) continue; // Holy Grail: Existing product remains untouched
+
         const uPrice = parseFloat(prod.price || prod.unitPrice) || 0;
         const cPrice = parseFloat(prod.costPrice) || Math.round(uPrice * 0.7);
         const hsn = prod.hsnCode || prod.hsn || '999999';
@@ -664,31 +672,20 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
         const category = (prod.category || 'General').trim();
         const stock = parseInt(prod.stock) || 50;
 
-        const match = findProd.get(reportData.userId, prodName);
-        if (match) {
-          updateExisting.run(
-            uPrice > 0 ? uPrice : match.price,
-            cPrice,
-            hsn !== '999999' ? hsn : match.hsn_code,
-            tax,
-            unit,
-            category || match.category,
-            match.id
-          );
-        } else {
-          insertNewProd.run(
-            `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-            reportData.userId,
-            prodName,
-            hsn,
-            uPrice,
-            cPrice,
-            tax,
-            unit,
-            category,
-            stock
-          );
-        }
+        const newId = `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+        insertNewProd.run(
+          newId,
+          reportData.userId,
+          prodName,
+          hsn,
+          uPrice,
+          cPrice,
+          tax,
+          unit,
+          category,
+          stock
+        );
+        prodMap.set(key, { id: newId, name: prodName, price: uPrice, hsn_code: hsn, category, unit, tax_rate: tax });
       }
     }
 
@@ -846,9 +843,21 @@ export const bulkSync = async (userId, products = [], zReports = []) => {
   const currentProducts = await getProducts(userId);
   const currentProdsByName = new Set(currentProducts.map(p => (p.name || '').toLowerCase().trim()));
 
+  const DEMO_NAMES = new Set([
+    'cotton polo t-shirt',
+    'wireless bluetooth earbuds',
+    'usb-c braided fast cable 65w',
+    'wireless optical mouse'
+  ]);
+  const DEMO_IDS = new Set(['prod-1', 'prod-2', 'prod-3', 'prod-4']);
+
   if (Array.isArray(products)) {
     for (const p of products) {
-      if (p.name && !currentProdsByName.has(p.name.toLowerCase().trim())) {
+      if (!p || !p.name) continue;
+      const lowerName = p.name.toLowerCase().trim();
+      if (DEMO_NAMES.has(lowerName) || DEMO_IDS.has(p.id)) continue;
+
+      if (!currentProdsByName.has(lowerName)) {
         await createProduct({
           id: p.id || `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
           userId,
@@ -861,7 +870,7 @@ export const bulkSync = async (userId, products = [], zReports = []) => {
           category: p.category,
           stock: p.stock
         });
-        currentProdsByName.add(p.name.toLowerCase().trim());
+        currentProdsByName.add(lowerName);
         addedProducts++;
       }
     }

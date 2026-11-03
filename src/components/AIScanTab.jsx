@@ -18,7 +18,8 @@ import {
   PackagePlus,
   Layers,
   Info,
-  Calendar
+  Calendar,
+  GitMerge
 } from 'lucide-react';
 import { 
   fileToBase64, 
@@ -83,7 +84,9 @@ export const AIScanTab = ({ onOpenSettings }) => {
           id: `new-prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
           originalName: name,
           name: name,
-          category: '', // Blank: User must enter manually!
+          action: 'new', // 'new' | 'merge'
+          mergedIntoProductId: '',
+          category: '', // User must enter if action === 'new'
           price: parseFloat(item.unitPrice || item.price) || 0,
           costPrice: Math.round((parseFloat(item.unitPrice || item.price) || 0) * 0.7),
           taxRate: parseFloat(item.taxRate) || 18,
@@ -169,6 +172,29 @@ export const AIScanTab = ({ onOpenSettings }) => {
         data.date = selectedJournalDate || data.date;
       }
 
+      // Holy Grail Principle: For any scanned line items that match existing store products,
+      // inherit the authoritative HSN code, GST rate, and unit from the catalog!
+      const existingMap = new Map();
+      (products || []).forEach(p => existingMap.set((p.name || '').toLowerCase().trim(), p));
+
+      if (Array.isArray(data.items)) {
+        data.items = data.items.map(item => {
+          const key = (item.productName || item.name || '').trim().toLowerCase();
+          const match = existingMap.get(key);
+          if (match) {
+            return {
+              ...item,
+              productName: match.name,
+              hsnCode: match.hsnCode || match.hsn_code || item.hsnCode || '999999',
+              taxRate: match.taxRate ?? item.taxRate ?? 18,
+              unit: match.unit || item.unit || 'pcs',
+              isNewProduct: false
+            };
+          }
+          return { ...item, isNewProduct: true };
+        });
+      }
+
       setExtractedZReport(data);
       const discovered = detectNewProducts(data.items);
       setNewProductsConfig(discovered);
@@ -197,6 +223,29 @@ export const AIScanTab = ({ onOpenSettings }) => {
   const handleSmartFallback = () => {
     // If user's key failed, parse sample or fallback
     const fallbackData = parseReceiptWithSmartHeuristic(rawText || 'Daily Sales Z-Report Total: 19800', products, selectedJournalDate);
+    
+    // Holy Grail Principle: Inherit curated catalog attributes
+    const existingMap = new Map();
+    (products || []).forEach(p => existingMap.set((p.name || '').toLowerCase().trim(), p));
+
+    if (Array.isArray(fallbackData.items)) {
+      fallbackData.items = fallbackData.items.map(item => {
+        const key = (item.productName || item.name || '').trim().toLowerCase();
+        const match = existingMap.get(key);
+        if (match) {
+          return {
+            ...item,
+            productName: match.name,
+            hsnCode: match.hsnCode || match.hsn_code || item.hsnCode || '999999',
+            taxRate: match.taxRate ?? item.taxRate ?? 18,
+            unit: match.unit || item.unit || 'pcs',
+            isNewProduct: false
+          };
+        }
+        return { ...item, isNewProduct: true };
+      });
+    }
+
     setExtractedZReport(fallbackData);
     const discovered = detectNewProducts(fallbackData.items);
     setNewProductsConfig(discovered);
@@ -279,12 +328,44 @@ export const AIScanTab = ({ onOpenSettings }) => {
   const handleUpdateNewProductConfig = (index, field, value) => {
     setNewProductsConfig(prev => {
       const next = [...prev];
-      next[index] = {
-        ...next[index],
-        [field]: field === 'price' || field === 'costPrice' || field === 'stock' || field === 'taxRate'
+      const current = next[index];
+      const updated = {
+        ...current,
+        [field]: (field === 'price' || field === 'costPrice' || field === 'stock' || field === 'taxRate')
           ? (parseFloat(value) || 0)
           : value
       };
+
+      // Auto-assign first existing product when switching to merge mode if none selected
+      if (field === 'action' && value === 'merge' && !updated.mergedIntoProductId && products.length > 0) {
+        updated.mergedIntoProductId = products[0].id;
+      }
+
+      // Synchronize the line item in extractedZReport if merged
+      const targetId = field === 'mergedIntoProductId' ? value : (updated.action === 'merge' ? updated.mergedIntoProductId : null);
+      if (targetId && extractedZReport) {
+        const targetProd = products.find(p => p.id === targetId);
+        if (targetProd) {
+          setExtractedZReport(rep => {
+            if (!rep || !rep.items) return rep;
+            const syncedItems = rep.items.map(it => {
+              const itName = (it.productName || it.name || '').trim().toLowerCase();
+              if (itName === current.originalName.toLowerCase()) {
+                return {
+                  ...it,
+                  hsnCode: targetProd.hsnCode || '999999',
+                  taxRate: targetProd.taxRate ?? 18,
+                  unit: targetProd.unit || it.unit || 'pcs'
+                };
+              }
+              return it;
+            });
+            return { ...rep, items: syncedItems };
+          });
+        }
+      }
+
+      next[index] = updated;
       return next;
     });
   };
@@ -295,16 +376,59 @@ export const AIScanTab = ({ onOpenSettings }) => {
       return;
     }
 
-    // Validate that every new product marked to add to catalog has a non-empty category
-    const unCategorized = newProductsConfig.filter(p => p.addToCatalog && !p.category?.trim());
+    // Validate that every product marked as 'new' to add to catalog has a non-empty category
+    const unCategorized = newProductsConfig.filter(
+      p => p.action !== 'merge' && p.addToCatalog && !p.category?.trim()
+    );
     if (unCategorized.length > 0) {
       setHighlightEmptyCategories(true);
       showToast(`Please enter a category for "${unCategorized[0].name}"`, 'error');
       return;
     }
 
-    const productsToCatalog = newProductsConfig.filter(p => p.addToCatalog);
-    const saved = await addOrUpdateZReport(extractedZReport, productsToCatalog);
+    // Validate that every product marked as 'merge' has selected a target catalog product
+    const unMerged = newProductsConfig.filter(
+      p => p.action === 'merge' && !p.mergedIntoProductId
+    );
+    if (unMerged.length > 0) {
+      showToast(`Please select which catalog product to merge "${unMerged[0].name}" into.`, 'error');
+      return;
+    }
+
+    // Map merged items to target product's holy grail attributes
+    const mergedMap = new Map();
+    newProductsConfig.forEach(p => {
+      if (p.action === 'merge' && p.mergedIntoProductId) {
+        const target = products.find(tp => tp.id === p.mergedIntoProductId);
+        if (target) {
+          mergedMap.set(p.originalName.toLowerCase().trim(), target);
+        }
+      }
+    });
+
+    const finalItems = extractedZReport.items.map(item => {
+      const key = (item.productName || item.name || '').toLowerCase().trim();
+      if (mergedMap.has(key)) {
+        const target = mergedMap.get(key);
+        return {
+          ...item,
+          productName: target.name,
+          hsnCode: target.hsnCode || '999999',
+          taxRate: target.taxRate ?? 18,
+          unit: target.unit || item.unit || 'pcs'
+        };
+      }
+      return item;
+    });
+
+    const reportToSave = {
+      ...extractedZReport,
+      items: finalItems
+    };
+
+    // Holy Grail: Only genuine new products (action !== 'merge' and addToCatalog === true) are sent to catalog
+    const productsToCatalog = newProductsConfig.filter(p => p.action !== 'merge' && p.addToCatalog);
+    const saved = await addOrUpdateZReport(reportToSave, productsToCatalog);
     setSelectedJournalDate(saved.date);
     setActiveTab('daily_journal');
 
@@ -315,8 +439,15 @@ export const AIScanTab = ({ onOpenSettings }) => {
     setHighlightEmptyCategories(false);
   };
 
-  // Check how many new products are missing category
-  const unCategorizedCount = newProductsConfig.filter(p => p.addToCatalog && !p.category?.trim()).length;
+  // Check how many new products are missing category or merge target
+  const unCategorizedCount = newProductsConfig.filter(
+    p => p.action !== 'merge' && p.addToCatalog && !p.category?.trim()
+  ).length;
+
+  const unMergedCount = newProductsConfig.filter(
+    p => p.action === 'merge' && !p.mergedIntoProductId
+  ).length;
+
   const existingCatalogNames = new Set((products || []).map(p => (p.name || '').toLowerCase().trim()));
 
   return (
@@ -636,15 +767,15 @@ export const AIScanTab = ({ onOpenSettings }) => {
                     </span>
                   </div>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                    unCategorizedCount === 0 
+                    unCategorizedCount === 0 && unMergedCount === 0
                       ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
                       : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-800'
                   }`}>
-                    {newProductsConfig.length - unCategorizedCount} of {newProductsConfig.length} Categorized
+                    {newProductsConfig.length - (unCategorizedCount + unMergedCount)} of {newProductsConfig.length} Ready
                   </span>
                 </div>
                 <p className="text-[11px] text-neutral-700 dark:text-zinc-300 font-sans leading-relaxed">
-                  These items were found on your Z-report and are not yet in your store catalog. Please <strong>enter a Category</strong> and verify the details for each product before saving.
+                  These items were found on your Z-report and are not in your store catalog. Choose to <strong>Add as New Product</strong> (enter category) or <strong>Merge into an Existing Product</strong> if it is a color/size variety.
                 </p>
               </div>
 
@@ -653,26 +784,29 @@ export const AIScanTab = ({ onOpenSettings }) => {
                 <div className="flex items-center justify-between px-1">
                   <span className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5">
                     <PackagePlus className="w-3.5 h-3.5 text-rust-600 dark:text-rust-400" />
-                    Configure New Products ({newProductsConfig.length})
+                    Review Discovered Products ({newProductsConfig.length})
                   </span>
-                  <span className="text-[10px] text-neutral-600 dark:text-zinc-400">
-                    * Category is required
+                  <span className="text-[10px] text-neutral-500 dark:text-zinc-400">
+                    Your manual catalog is the holy grail
                   </span>
                 </div>
 
                 {newProductsConfig.map((prod, pIdx) => {
-                  const isMissingCat = highlightEmptyCategories && prod.addToCatalog && !prod.category?.trim();
+                  const isMerge = prod.action === 'merge';
+                  const isMissingCat = highlightEmptyCategories && !isMerge && prod.addToCatalog && !prod.category?.trim();
+                  const isMissingMerge = isMerge && !prod.mergedIntoProductId;
+                  const selectedTarget = isMerge && prod.mergedIntoProductId ? products.find(p => p.id === prod.mergedIntoProductId) : null;
 
                   return (
                     <div 
                       key={prod.id || pIdx}
                       className={`p-3.5 rounded-2xl border transition-all ${
-                        isMissingCat 
+                        isMissingCat || isMissingMerge
                           ? 'border-red-400 dark:border-red-600/80 bg-red-50/40 dark:bg-red-950/20 shadow-xs ring-1 ring-red-400'
                           : 'border-neutral-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-850/70 shadow-2xs'
                       } space-y-3`}
                     >
-                      {/* Header: Product Name + Add to catalog checkbox */}
+                      {/* Header: Discovered Name on Receipt */}
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1">
                           <div className="flex items-center gap-1.5 mb-1">
@@ -680,7 +814,7 @@ export const AIScanTab = ({ onOpenSettings }) => {
                               NEW #{pIdx + 1}
                             </span>
                             <span className="text-[10px] font-medium text-neutral-600 dark:text-zinc-400">
-                              Product Name
+                              Receipt Name:
                             </span>
                           </div>
                           <input
@@ -690,128 +824,216 @@ export const AIScanTab = ({ onOpenSettings }) => {
                             className="w-full font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 outline-none focus:border-rust-500"
                           />
                         </div>
-
-                        <label className="flex items-center gap-1.5 text-[11px] font-medium text-neutral-700 dark:text-zinc-300 cursor-pointer pt-4 shrink-0">
-                          <input
-                            type="checkbox"
-                            checked={prod.addToCatalog}
-                            onChange={(e) => handleUpdateNewProductConfig(pIdx, 'addToCatalog', e.target.checked)}
-                            className="rounded border-neutral-300 text-rust-600 focus:ring-rust-500"
-                          />
-                          <span>Add to Catalog</span>
-                        </label>
                       </div>
 
-                      {prod.addToCatalog && (
-                        <div className="space-y-2.5 pt-1 border-t border-neutral-100 dark:border-zinc-800/80">
-                          {/* Mandatory Category Input */}
-                          <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-[10px] font-bold text-neutral-800 dark:text-zinc-200 flex items-center gap-1">
-                                <Tag className="w-3 h-3 text-rust-600 dark:text-rust-400" />
-                                Category <span className="text-red-500">*</span>
-                              </span>
-                              {isMissingCat && (
-                                <span className="text-[10px] font-bold text-red-600 dark:text-red-400">
-                                  Category required!
-                                </span>
-                              )}
-                            </div>
+                      {/* Action Mode Toggle: Add as New Product vs Merge into Existing */}
+                      <div className="grid grid-cols-2 gap-1.5 p-1 bg-neutral-100 dark:bg-zinc-800/90 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateNewProductConfig(pIdx, 'action', 'new')}
+                          className={`py-1.5 px-2 rounded-lg text-xs font-display font-bold flex items-center justify-center gap-1.5 transition-all ${
+                            !isMerge
+                              ? 'bg-white dark:bg-zinc-700 text-neutral-900 dark:text-neutral-100 shadow-2xs'
+                              : 'text-neutral-500 dark:text-zinc-400 hover:text-neutral-800 dark:hover:text-zinc-200'
+                          }`}
+                        >
+                          <Plus className="w-3.5 h-3.5 text-rust-600 dark:text-rust-400" />
+                          Add as New Product
+                        </button>
 
-                            <input
-                              type="text"
-                              value={prod.category}
-                              placeholder="Type category (e.g. Sarees, Fabrics, Groceries, Apparel...)"
-                              onChange={(e) => handleUpdateNewProductConfig(pIdx, 'category', e.target.value)}
-                              className={`w-full font-semibold text-xs rounded-lg px-2.5 py-1.5 outline-none transition-colors ${
-                                isMissingCat
-                                  ? 'bg-red-50 dark:bg-red-950/40 border border-red-400 dark:border-red-500 text-neutral-900 dark:text-neutral-100 placeholder-red-400'
-                                  : 'bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 text-neutral-900 dark:text-neutral-100 focus:border-rust-500'
-                              }`}
-                            />
+                        <button
+                          type="button"
+                          disabled={products.length === 0}
+                          onClick={() => {
+                            if (products.length > 0) {
+                              handleUpdateNewProductConfig(pIdx, 'action', 'merge');
+                            }
+                          }}
+                          className={`py-1.5 px-2 rounded-lg text-xs font-display font-bold flex items-center justify-center gap-1.5 transition-all ${
+                            isMerge
+                              ? 'bg-white dark:bg-zinc-700 text-rust-700 dark:text-rust-300 shadow-2xs'
+                              : 'text-neutral-500 dark:text-zinc-400 hover:text-neutral-800 dark:hover:text-zinc-200'
+                          } ${products.length === 0 ? 'opacity-40 cursor-not-allowed' : ''}`}
+                        >
+                          <GitMerge className="w-3.5 h-3.5 text-rust-600 dark:text-rust-400" />
+                          Merge with Existing {products.length > 0 ? `(${products.length})` : ''}
+                        </button>
+                      </div>
 
-                            {/* Quick Suggestion Chips */}
-                            <div className="flex flex-wrap gap-1 mt-1.5">
-                              <span className="text-[9px] text-neutral-600 dark:text-zinc-400 self-center mr-1">Quick choose:</span>
-                              {COMMON_CATEGORIES.map(cat => (
-                                <button
-                                  key={cat}
-                                  type="button"
-                                  onClick={() => handleUpdateNewProductConfig(pIdx, 'category', cat)}
-                                  className={`text-[10px] px-2 py-0.5 rounded-full transition-all border ${
-                                    prod.category === cat
-                                      ? 'bg-rust-700 text-white border-rust-700 shadow-2xs font-semibold'
-                                      : 'bg-neutral-100 dark:bg-zinc-800 hover:bg-neutral-200 dark:hover:bg-zinc-700 text-neutral-700 dark:text-zinc-300 border-neutral-200 dark:border-zinc-700'
-                                  }`}
-                                >
-                                  {cat}
-                                </button>
-                              ))}
-                            </div>
+                      {/* MODE 1: MERGE INTO EXISTING CATALOG PRODUCT */}
+                      {isMerge && (
+                        <div className="p-3 rounded-xl bg-rust-50/60 dark:bg-rust-950/30 border border-rust-200/80 dark:border-rust-800/60 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <label className="text-[11px] font-bold text-rust-900 dark:text-rust-200 flex items-center gap-1">
+                              <Layers className="w-3.5 h-3.5 text-rust-600" />
+                              Select Existing Product to Merge Into:
+                            </label>
+                            <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-300 dark:border-emerald-800">
+                              ✓ No Duplicate in Catalog
+                            </span>
                           </div>
 
-                          {/* Inventory & Pricing Grid */}
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
-                            <div>
-                              <span className="block text-[9px] font-medium text-neutral-600 dark:text-zinc-400">
-                                Selling Rate ({shopProfile.currency})
-                              </span>
-                              <input
-                                type="number"
-                                min="0"
-                                value={prod.price}
-                                onChange={(e) => handleUpdateNewProductConfig(pIdx, 'price', e.target.value)}
-                                className="w-full font-display font-bold text-xs bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2 py-1 outline-none focus:border-rust-500"
-                              />
-                            </div>
+                          <select
+                            value={prod.mergedIntoProductId}
+                            onChange={(e) => handleUpdateNewProductConfig(pIdx, 'mergedIntoProductId', e.target.value)}
+                            className="w-full text-xs font-semibold bg-white dark:bg-zinc-800 border border-rust-300 dark:border-rust-700 rounded-lg px-2.5 py-2 text-neutral-900 dark:text-neutral-100 outline-none focus:ring-1 focus:ring-rust-500"
+                          >
+                            <option value="">-- Choose Existing Product from Catalog --</option>
+                            {products.map(p => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} (HSN: {p.hsnCode || 'N/A'}, GST: {p.taxRate}%, {p.category})
+                              </option>
+                            ))}
+                          </select>
 
-                            <div>
-                              <span className="block text-[9px] font-medium text-neutral-600 dark:text-zinc-400">
-                                Cost Price ({shopProfile.currency})
-                              </span>
-                              <input
-                                type="number"
-                                min="0"
-                                value={prod.costPrice}
-                                onChange={(e) => handleUpdateNewProductConfig(pIdx, 'costPrice', e.target.value)}
-                                className="w-full font-display font-bold text-xs bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2 py-1 outline-none focus:border-rust-500"
-                              />
+                          {selectedTarget ? (
+                            <div className="text-[11px] text-neutral-700 dark:text-zinc-300 bg-white/90 dark:bg-zinc-900/90 p-2.5 rounded-lg border border-rust-200/60 dark:border-rust-800/60 space-y-1">
+                              <div className="flex items-center gap-1 font-bold text-rust-800 dark:text-rust-300 text-xs">
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                Variety Linked to Master:
+                              </div>
+                              <p className="leading-snug">
+                                Receipts for <strong>"{prod.name}"</strong> will be recorded under catalog master <strong>"{selectedTarget.name}"</strong> with Holy Grail HSN <span className="font-mono font-bold text-neutral-900 dark:text-neutral-100">{selectedTarget.hsnCode || 'N/A'}</span> and <span className="font-bold text-neutral-900 dark:text-neutral-100">{selectedTarget.taxRate}% GST</span>.
+                              </p>
                             </div>
-
-                            <div>
-                              <span className="block text-[9px] font-medium text-neutral-600 dark:text-zinc-400">
-                                Unit
-                              </span>
-                              <select
-                                value={prod.unit}
-                                onChange={(e) => handleUpdateNewProductConfig(pIdx, 'unit', e.target.value)}
-                                className="w-full font-display font-medium text-xs bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2 py-1 outline-none focus:border-rust-500 text-neutral-900 dark:text-neutral-100"
-                              >
-                                <option value="pcs">pcs</option>
-                                <option value="mtr">mtr</option>
-                                <option value="kg">kg</option>
-                                <option value="gm">gm</option>
-                                <option value="pkt">pkt</option>
-                                <option value="box">box</option>
-                                <option value="pair">pair</option>
-                                <option value="set">set</option>
-                              </select>
-                            </div>
-
-                            <div>
-                              <span className="block text-[9px] font-medium text-neutral-600 dark:text-zinc-400">
-                                Opening Stock
-                              </span>
-                              <input
-                                type="number"
-                                min="0"
-                                value={prod.stock}
-                                onChange={(e) => handleUpdateNewProductConfig(pIdx, 'stock', e.target.value)}
-                                className="w-full font-display font-bold text-xs bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2 py-1 outline-none focus:border-rust-500"
-                              />
-                            </div>
-                          </div>
+                          ) : (
+                            <p className="text-[10px] text-rust-600 dark:text-rust-400 italic">
+                              * Select which existing product represents this variety (e.g., color, size, or brand variation).
+                            </p>
+                          )}
                         </div>
+                      )}
+
+                      {/* MODE 2: ADD AS NEW PRODUCT */}
+                      {!isMerge && (
+                        <>
+                          <div className="flex items-center justify-between pt-1">
+                            <span className="text-[11px] text-neutral-600 dark:text-zinc-400">
+                              Define category and inventory for this new catalog item:
+                            </span>
+                            <label className="flex items-center gap-1.5 text-[11px] font-medium text-neutral-700 dark:text-zinc-300 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={prod.addToCatalog}
+                                onChange={(e) => handleUpdateNewProductConfig(pIdx, 'addToCatalog', e.target.checked)}
+                                className="rounded border-neutral-300 text-rust-600 focus:ring-rust-500"
+                              />
+                              <span>Save to Store Catalog</span>
+                            </label>
+                          </div>
+
+                          {prod.addToCatalog && (
+                            <div className="space-y-2.5 pt-1 border-t border-neutral-100 dark:border-zinc-800/80">
+                              {/* Mandatory Category Input */}
+                              <div>
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-[10px] font-bold text-neutral-800 dark:text-zinc-200 flex items-center gap-1">
+                                    <Tag className="w-3 h-3 text-rust-600 dark:text-rust-400" />
+                                    Category <span className="text-red-500">*</span>
+                                  </span>
+                                  {isMissingCat && (
+                                    <span className="text-[10px] font-bold text-red-600 dark:text-red-400">
+                                      Category required!
+                                    </span>
+                                  )}
+                                </div>
+
+                                <input
+                                  type="text"
+                                  value={prod.category}
+                                  placeholder="Type category (e.g. Sarees, Fabrics, Groceries, Apparel...)"
+                                  onChange={(e) => handleUpdateNewProductConfig(pIdx, 'category', e.target.value)}
+                                  className={`w-full font-semibold text-xs rounded-lg px-2.5 py-1.5 outline-none transition-colors ${
+                                    isMissingCat
+                                      ? 'bg-red-50 dark:bg-red-950/40 border border-red-400 dark:border-red-500 text-neutral-900 dark:text-neutral-100 placeholder-red-400'
+                                      : 'bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 text-neutral-900 dark:text-neutral-100 focus:border-rust-500'
+                                  }`}
+                                />
+
+                                {/* Quick Suggestion Chips */}
+                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                  <span className="text-[9px] text-neutral-600 dark:text-zinc-400 self-center mr-1">Quick choose:</span>
+                                  {COMMON_CATEGORIES.map(cat => (
+                                    <button
+                                      key={cat}
+                                      type="button"
+                                      onClick={() => handleUpdateNewProductConfig(pIdx, 'category', cat)}
+                                      className={`text-[10px] px-2 py-0.5 rounded-full transition-all border ${
+                                        prod.category === cat
+                                          ? 'bg-rust-700 text-white border-rust-700 shadow-2xs font-semibold'
+                                          : 'bg-neutral-100 dark:bg-zinc-800 hover:bg-neutral-200 dark:hover:bg-zinc-700 text-neutral-700 dark:text-zinc-300 border-neutral-200 dark:border-zinc-700'
+                                      }`}
+                                    >
+                                      {cat}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+
+                              {/* Inventory & Pricing Grid */}
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
+                                <div>
+                                  <span className="block text-[9px] font-medium text-neutral-600 dark:text-zinc-400">
+                                    Selling Rate ({shopProfile.currency})
+                                  </span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={prod.price}
+                                    onChange={(e) => handleUpdateNewProductConfig(pIdx, 'price', e.target.value)}
+                                    className="w-full font-display font-bold text-xs bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2 py-1 outline-none focus:border-rust-500"
+                                  />
+                                </div>
+
+                                <div>
+                                  <span className="block text-[9px] font-medium text-neutral-600 dark:text-zinc-400">
+                                    Cost Price ({shopProfile.currency})
+                                  </span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={prod.costPrice}
+                                    onChange={(e) => handleUpdateNewProductConfig(pIdx, 'costPrice', e.target.value)}
+                                    className="w-full font-display font-bold text-xs bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2 py-1 outline-none focus:border-rust-500"
+                                  />
+                                </div>
+
+                                <div>
+                                  <span className="block text-[9px] font-medium text-neutral-600 dark:text-zinc-400">
+                                    Unit
+                                  </span>
+                                  <select
+                                    value={prod.unit}
+                                    onChange={(e) => handleUpdateNewProductConfig(pIdx, 'unit', e.target.value)}
+                                    className="w-full font-display font-medium text-xs bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2 py-1 outline-none focus:border-rust-500 text-neutral-900 dark:text-neutral-100"
+                                  >
+                                    <option value="pcs">pcs</option>
+                                    <option value="mtr">mtr</option>
+                                    <option value="kg">kg</option>
+                                    <option value="gm">gm</option>
+                                    <option value="pkt">pkt</option>
+                                    <option value="box">box</option>
+                                    <option value="pair">pair</option>
+                                    <option value="set">set</option>
+                                  </select>
+                                </div>
+
+                                <div>
+                                  <span className="block text-[9px] font-medium text-neutral-600 dark:text-zinc-400">
+                                    Opening Stock
+                                  </span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={prod.stock}
+                                    onChange={(e) => handleUpdateNewProductConfig(pIdx, 'stock', e.target.value)}
+                                    className="w-full font-display font-bold text-xs bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg px-2 py-1 outline-none focus:border-rust-500"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   );
@@ -883,7 +1105,12 @@ export const AIScanTab = ({ onOpenSettings }) => {
                       <div className="flex items-center gap-1.5">
                         {isExisting ? (
                           <span className="text-[9px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/40">
-                            ✓ In Store Catalog
+                            ✓ In Store Catalog (Holy Grail)
+                          </span>
+                        ) : newProdConfig?.action === 'merge' ? (
+                          <span className="text-[9px] font-bold text-rust-700 dark:text-rust-300 bg-rust-50 dark:bg-rust-950/50 px-2 py-0.5 rounded-md border border-rust-200 dark:border-rust-800/40 flex items-center gap-1">
+                            <GitMerge className="w-2.5 h-2.5" />
+                            Merged Variety → {products.find(p => p.id === newProdConfig.mergedIntoProductId)?.name || 'Select Product Above'}
                           </span>
                         ) : (
                           <span className="text-[9px] font-bold text-rust-700 dark:text-rust-300 bg-rust-50 dark:bg-rust-950/50 px-2 py-0.5 rounded-md border border-rust-200 dark:border-rust-800/40 flex items-center gap-1">
@@ -945,11 +1172,16 @@ export const AIScanTab = ({ onOpenSettings }) => {
 
           {/* Confirm & Save */}
           <div className="space-y-2 pt-2">
-            {unCategorizedCount > 0 && (
+            {(unCategorizedCount > 0 || unMergedCount > 0) && (
               <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 text-xs flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
                 <span className="text-[11px] font-medium">
-                  Please enter a <strong>Category</strong> for all {unCategorizedCount} new product{unCategorizedCount > 1 ? 's' : ''} to save.
+                  {unCategorizedCount > 0 && (
+                    <span>Please enter a <strong>Category</strong> for {unCategorizedCount} new product{unCategorizedCount > 1 ? 's' : ''}. </span>
+                  )}
+                  {unMergedCount > 0 && (
+                    <span>Please choose which existing product to merge {unMergedCount} item{unMergedCount > 1 ? 's' : ''} into.</span>
+                  )}
                 </span>
               </div>
             )}
@@ -957,20 +1189,20 @@ export const AIScanTab = ({ onOpenSettings }) => {
             <button
               onClick={handleConfirmAndSave}
               className={`w-full py-3 rounded-full font-display font-bold text-xs shadow-spray-rust flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
-                unCategorizedCount > 0
+                (unCategorizedCount > 0 || unMergedCount > 0)
                   ? 'bg-amber-600 hover:bg-amber-500 text-white'
                   : 'bg-gradient-to-r from-rust-700 via-rust-600 to-copper-600 hover:from-rust-600 hover:to-copper-500 text-white'
               }`}
             >
-              {unCategorizedCount > 0 ? (
+              {(unCategorizedCount > 0 || unMergedCount > 0) ? (
                 <>
                   <AlertCircle className="w-4 h-4 stroke-[2.5]" />
-                  Enter Category for {unCategorizedCount} New Product{unCategorizedCount > 1 ? 's' : ''}
+                  Complete Product Details to Confirm
                 </>
               ) : (
                 <>
                   <Check className="w-4 h-4 stroke-[2.5]" />
-                  Confirm, Log Z-Report & Add {newProductsConfig.filter(p => p.addToCatalog).length} Products
+                  Confirm, Log Z-Report & Add {newProductsConfig.filter(p => p.action !== 'merge' && p.addToCatalog).length} New Products
                 </>
               )}
             </button>

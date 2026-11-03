@@ -4,91 +4,62 @@ import { productsApi, zReportsApi, backupApi } from '../services/api';
 
 const AppContext = createContext();
 
-const FALLBACK_PRODUCTS = [
-  {
-    id: 'prod-1',
-    name: 'Cotton Polo T-Shirt',
-    hsnCode: '61091000',
-    price: 499,
-    costPrice: 280,
-    unit: 'pcs',
-    category: 'Apparel',
-    taxRate: 5,
-    stock: 85,
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'prod-2',
-    name: 'Wireless Bluetooth Earbuds',
-    hsnCode: '85183000',
-    price: 1299,
-    costPrice: 750,
-    unit: 'pcs',
-    category: 'Electronics',
-    taxRate: 18,
-    stock: 34,
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'prod-3',
-    name: 'USB-C Braided Fast Cable 65W',
-    hsnCode: '85444299',
-    price: 249,
-    costPrice: 110,
-    unit: 'pcs',
-    category: 'Electronics',
-    taxRate: 18,
-    stock: 92,
-    updatedAt: new Date().toISOString()
-  },
-  {
-    id: 'prod-4',
-    name: 'Wireless Optical Mouse',
-    hsnCode: '84716060',
-    price: 450,
-    costPrice: 240,
-    unit: 'pcs',
-    category: 'Electronics',
-    taxRate: 18,
-    stock: 28,
-    updatedAt: new Date().toISOString()
-  }
-];
+// Authoritative holy grail catalog: Never pre-populate demo electronics into real user shops
+const DEMO_PRODUCT_IDS = new Set(['prod-1', 'prod-2', 'prod-3', 'prod-4']);
+const DEMO_PRODUCT_NAMES = new Set([
+  'cotton polo t-shirt',
+  'wireless bluetooth earbuds',
+  'usb-c braided fast cable 65w',
+  'wireless optical mouse'
+]);
 
-const FALLBACK_Z_REPORTS = [
-  {
-    id: 'z-2026-11-01',
-    date: '2026-11-01',
-    reportNumber: 'Z-0048',
-    closingTime: '21:45',
-    storeName: 'Smart Retail Store',
-    registerId: 'REG-01',
-    totalItemsSold: 45,
-    grossSales: 19800,
-    discount: 650,
-    netSales: 19150,
-    taxTotal: 2140,
-    paymentBreakdown: { cash: 6200, upi: 9850, card: 3100 },
-    items: [
-      { productName: 'Cotton Polo T-Shirt', hsnCode: '61091000', quantity: 14, unit: 'pcs', unitPrice: 499, lineTotal: 6986, taxRate: 5 },
-      { productName: 'Wireless Bluetooth Earbuds', hsnCode: '85183000', quantity: 4, unit: 'pcs', unitPrice: 1299, lineTotal: 5196, taxRate: 18 },
-      { productName: 'USB-C Braided Fast Cable 65W', hsnCode: '85444299', quantity: 12, unit: 'pcs', unitPrice: 249, lineTotal: 2988, taxRate: 18 }
-    ],
-    uploadedAt: '2026-11-01T21:46:12Z'
-  }
-];
+const sanitizeProducts = (list) => {
+  if (!Array.isArray(list)) return [];
+  return list.filter(p => {
+    if (!p || !p.name) return false;
+    if (DEMO_PRODUCT_IDS.has(p.id)) return false;
+    if (DEMO_PRODUCT_NAMES.has(p.name.trim().toLowerCase())) return false;
+    return true;
+  });
+};
+
+const sanitizeZReports = (list) => {
+  if (!Array.isArray(list)) return [];
+  return list.filter(r => {
+    if (!r || !r.date) return false;
+    if (r.id === 'z-2026-11-01' && r.reportNumber === 'Z-0048') return false;
+    return true;
+  });
+};
+
+const FALLBACK_PRODUCTS = [];
+const FALLBACK_Z_REPORTS = [];
 
 export const AppProvider = ({ children }) => {
   const { user, isAuthenticated, updateUserProfile } = useAuth();
 
   const [products, setProducts] = useState(() => {
-    const saved = localStorage.getItem('retail_products');
-    return saved ? JSON.parse(saved) : FALLBACK_PRODUCTS;
+    try {
+      const saved = localStorage.getItem('retail_products');
+      if (saved) {
+        const clean = sanitizeProducts(JSON.parse(saved));
+        localStorage.setItem('retail_products', JSON.stringify(clean));
+        return clean;
+      }
+    } catch {}
+    return FALLBACK_PRODUCTS;
   });
 
   const [zReports, setZReports] = useState(() => {
-    const saved = localStorage.getItem('retail_z_reports');
-    return saved ? JSON.parse(saved) : FALLBACK_Z_REPORTS;
+    try {
+      const saved = localStorage.getItem('retail_z_reports');
+      if (saved) {
+        const clean = sanitizeZReports(JSON.parse(saved));
+        localStorage.setItem('retail_z_reports', JSON.stringify(clean));
+        return clean;
+      }
+    } catch {}
+    return FALLBACK_Z_REPORTS;
   });
 
   const [geminiApiKey, setGeminiApiKey] = useState(() => {
@@ -127,7 +98,7 @@ export const AppProvider = ({ children }) => {
     tagline: user?.tagline || 'Your neighborhood retail shop'
   };
 
-  // Synchronize with backend SQLite database when user changes or logs in
+  // Synchronize with backend database when user changes or logs in
   useEffect(() => {
     const fetchRemoteData = async () => {
       if (!isAuthenticated) return;
@@ -138,44 +109,23 @@ export const AppProvider = ({ children }) => {
           localStorage.setItem('gemini_free_api_key', user.gemini_api_key);
         }
 
-        // Auto-merge any local cached products/reports into persistent SQLite
-        const localProducts = JSON.parse(localStorage.getItem('retail_products') || '[]');
-        const localReports = JSON.parse(localStorage.getItem('retail_z_reports') || '[]');
-
-        if (localProducts.length > 0 || localReports.length > 0) {
-          try {
-            const syncRes = await backupApi.bulkSync({
-              products: localProducts,
-              zReports: localReports
-            });
-            if (syncRes.products) {
-              setProducts(syncRes.products);
-              localStorage.setItem('retail_products', JSON.stringify(syncRes.products));
-            }
-            if (syncRes.zReports) {
-              setZReports(syncRes.zReports);
-              localStorage.setItem('retail_z_reports', JSON.stringify(syncRes.zReports));
-            }
-          } catch (syncErr) {
-            console.warn('Bulk sync deferral:', syncErr.message);
-          }
-        }
-
-        // Fetch authoritative products from SQLite database
+        // Fetch authoritative products from persistent database
         const prodRes = await productsApi.getAll();
         if (prodRes.products) {
-          setProducts(prodRes.products);
-          localStorage.setItem('retail_products', JSON.stringify(prodRes.products));
+          const cleanProds = sanitizeProducts(prodRes.products);
+          setProducts(cleanProds);
+          localStorage.setItem('retail_products', JSON.stringify(cleanProds));
         }
 
-        // Fetch authoritative Z-reports from SQLite database
+        // Fetch authoritative Z-reports from persistent database
         const zRes = await zReportsApi.getAll();
         if (zRes.zReports) {
-          setZReports(zRes.zReports);
-          localStorage.setItem('retail_z_reports', JSON.stringify(zRes.zReports));
+          const cleanReports = sanitizeZReports(zRes.zReports);
+          setZReports(cleanReports);
+          localStorage.setItem('retail_z_reports', JSON.stringify(cleanReports));
         }
 
-        // Check SQLite persistence health status
+        // Check persistence health status
         const statusRes = await backupApi.getStatus().catch(() => ({}));
         setDbStatus({
           isConnected: true,
@@ -308,7 +258,8 @@ export const AppProvider = ({ children }) => {
     setSelectedAnalyticsMonth(repMonth);
     setSelectedJournalDate(reportDate);
 
-    // If user reviewed and configured new products, merge them into local product catalogue
+    // If user reviewed and configured new products, add brand-new items into product catalogue
+    // Holy Grail Principle: Existing catalog products must never be overwritten or downgraded by receipt scans!
     let addedCount = 0;
     if (configuredNewProducts && configuredNewProducts.length > 0) {
       setProducts(prevProducts => {
@@ -316,31 +267,21 @@ export const AppProvider = ({ children }) => {
         prevProducts.forEach(p => prodMap.set((p.name || '').toLowerCase().trim(), { ...p }));
 
         configuredNewProducts.forEach(item => {
-          if (item.addToCatalog === false) return;
+          if (item.addToCatalog === false || item.action === 'merge') return;
           const name = (item.name || item.productName || '').trim();
           if (!name) return;
           const key = name.toLowerCase();
-          const uPrice = parseFloat(item.price || item.unitPrice) || 0;
-          const cPrice = parseFloat(item.costPrice) || Math.round(uPrice * 0.7);
-          const hsn = item.hsnCode || item.hsn || '999999';
-          const tax = parseFloat(item.taxRate) || 18;
-          const unit = item.unit || 'pcs';
-          const category = (item.category || 'General').trim();
-          const stock = parseInt(item.stock) || 50;
 
-          if (prodMap.has(key)) {
-            const existing = prodMap.get(key);
-            prodMap.set(key, {
-              ...existing,
-              price: uPrice > 0 ? uPrice : existing.price,
-              costPrice: cPrice > 0 ? cPrice : existing.costPrice,
-              hsnCode: hsn !== '999999' ? hsn : existing.hsnCode,
-              taxRate: tax,
-              unit: unit || existing.unit,
-              category: category || existing.category,
-              updatedAt: new Date().toISOString()
-            });
-          } else {
+          // Holy Grail: If it already exists in the catalog, DO NOT alter its details
+          if (!prodMap.has(key)) {
+            const uPrice = parseFloat(item.price || item.unitPrice) || 0;
+            const cPrice = parseFloat(item.costPrice) || Math.round(uPrice * 0.7);
+            const hsn = item.hsnCode || item.hsn || '999999';
+            const tax = parseFloat(item.taxRate) || 18;
+            const unit = item.unit || 'pcs';
+            const category = (item.category || 'General').trim();
+            const stock = parseInt(item.stock) || 50;
+
             prodMap.set(key, {
               id: item.id || `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
               name,
@@ -357,7 +298,7 @@ export const AppProvider = ({ children }) => {
           }
         });
 
-        const newProductList = Array.from(prodMap.values());
+        const newProductList = sanitizeProducts(Array.from(prodMap.values()));
         localStorage.setItem('retail_products', JSON.stringify(newProductList));
         return newProductList;
       });
@@ -374,8 +315,9 @@ export const AppProvider = ({ children }) => {
           setZReports(prev => prev.map(r => r.date === reportDate ? res.report : r));
         }
         if (res.products && Array.isArray(res.products)) {
-          setProducts(res.products);
-          localStorage.setItem('retail_products', JSON.stringify(res.products));
+          const cleanProds = sanitizeProducts(res.products);
+          setProducts(cleanProds);
+          localStorage.setItem('retail_products', JSON.stringify(cleanProds));
         }
       } catch (err) {
         console.warn('Stored locally in cache, database sync deferred:', err.message);
