@@ -112,7 +112,7 @@ export const AIScanTab = ({ onOpenSettings }) => {
           category: '', // User must enter if action === 'new' and addToCatalog === true
           price: parseFloat(item.unitPrice || item.price) || 0,
           costPrice: Math.round((parseFloat(item.unitPrice || item.price) || 0) * 0.7),
-          taxRate: parseFloat(item.taxRate) || 18,
+          taxRate: parseFloat(item.taxRate) || 5,
           hsnCode: item.hsnCode || item.hsn || '999999',
           unit: item.unit || 'pcs',
           stock: 50,
@@ -216,7 +216,7 @@ export const AIScanTab = ({ onOpenSettings }) => {
                 ...item,
                 productName: match.name,
                 hsnCode: match.hsnCode || match.hsn_code || item.hsnCode || '999999',
-                taxRate: match.taxRate ?? item.taxRate ?? 18,
+                taxRate: match.taxRate ?? item.taxRate ?? 5,
                 unit: match.unit || item.unit || 'pcs',
                 isNewProduct: false
               };
@@ -274,7 +274,7 @@ export const AIScanTab = ({ onOpenSettings }) => {
               ...item,
               productName: match.name,
               hsnCode: match.hsnCode || match.hsn_code || item.hsnCode || '999999',
-              taxRate: match.taxRate ?? item.taxRate ?? 18,
+              taxRate: match.taxRate ?? item.taxRate ?? 5,
               unit: match.unit || item.unit || 'pcs',
               isNewProduct: false
             };
@@ -300,7 +300,7 @@ export const AIScanTab = ({ onOpenSettings }) => {
       unit: 'pcs',
       unitPrice: 0,
       lineTotal: 0,
-      taxRate: 18,
+      taxRate: 5,
       isNewProduct: true
     };
     const updatedItems = [...(extractedZReport.items || []), newItem];
@@ -1199,7 +1199,7 @@ export const AIScanTab = ({ onOpenSettings }) => {
                   </div>
 
                   <div className="flex items-center justify-between pt-1 text-[10px] text-neutral-500 dark:text-zinc-400 border-t border-neutral-100 dark:border-zinc-800">
-                    <span>GST: {item.taxRate || 18}%</span>
+                    <span>GST: {item.taxRate || 5}% ({(item.taxRate || 5) / 2}% + {(item.taxRate || 5) / 2}%)</span>
                     <span className="font-display font-bold text-neutral-900 dark:text-neutral-100">
                       Total: {shopProfile.currency}{item.lineTotal?.toLocaleString()}
                     </span>

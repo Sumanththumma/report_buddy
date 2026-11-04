@@ -243,6 +243,11 @@ CRITICAL EXTRACTION MANDATES:
 4. NEW PRODUCT DISCOVERY FLAG:
    - For every item in "items", set "isNewProduct": true if the product is NOT found in the STORE CATALOG above.
    - Set "isNewProduct": false if it matches an existing catalog item.
+5. GST TAX RATE RULES (INDIAN GST COMPLIANCE):
+   - A 5% GST rate represents a TOTAL GST of 5% (split 50/50 into 2.5% Central CGST + 2.5% State SGST). It is NEVER 5% + 5%.
+   - Similarly, 12% is total (6% CGST + 6% SGST), 18% is total (9% CGST + 9% SGST), 0% is exempt.
+   - For fabrics, textiles, matching materials (fall, rubia, cotton), the standard rate is 5%.
+   - In the JSON output, "taxRate" MUST be the TOTAL percentage (e.g. 5, 12, 18, 0).
 
 Return ONLY a raw, valid JSON object matching this exact schema:
 {
@@ -270,7 +275,7 @@ Return ONLY a raw, valid JSON object matching this exact schema:
       "unit": "pcs | mtr | kg | gm | pkt | box | pair | set",
       "unitPrice": number,
       "lineTotal": number,
-      "taxRate": number,
+      "taxRate": number (total rate e.g. 5 for 2.5% CGST + 2.5% SGST),
       "isNewProduct": boolean
     }
   ]

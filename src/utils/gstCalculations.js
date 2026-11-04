@@ -77,6 +77,8 @@ export const calculateMonthlyGST = (reports = [], shopProfile = {}) => {
   standardRates.forEach(rate => {
     table7Map.set(rate, {
       rate,
+      cgstRate: rate / 2,
+      sgstRate: rate / 2,
       taxableValue: 0,
       cgst: 0,
       sgst: 0,
@@ -158,6 +160,8 @@ export const calculateMonthlyGST = (reports = [], shopProfile = {}) => {
           uqc: getUQC(unit),
           unit,
           rate,
+          cgstRate: rate / 2,
+          sgstRate: rate / 2,
           totalQty: 0,
           totalValue: 0,
           taxableValue: 0,
@@ -178,7 +182,15 @@ export const calculateMonthlyGST = (reports = [], shopProfile = {}) => {
 
       // Table 7 Aggregation (grouped by Rate Slab)
       if (!table7Map.has(rate)) {
-        table7Map.set(rate, { rate, taxableValue: 0, cgst: 0, sgst: 0, totalValue: 0 });
+        table7Map.set(rate, { 
+          rate, 
+          cgstRate: rate / 2, 
+          sgstRate: rate / 2, 
+          taxableValue: 0, 
+          cgst: 0, 
+          sgst: 0, 
+          totalValue: 0 
+        });
       }
       const t7Row = table7Map.get(rate);
       t7Row.taxableValue += taxable;
@@ -217,6 +229,8 @@ export const calculateMonthlyGST = (reports = [], shopProfile = {}) => {
           uqc: 'PCS-PIECES',
           unit: 'pcs',
           rate: defaultRate,
+          cgstRate: defaultRate / 2,
+          sgstRate: defaultRate / 2,
           totalQty: 0,
           totalValue: 0,
           taxableValue: 0,
@@ -237,7 +251,15 @@ export const calculateMonthlyGST = (reports = [], shopProfile = {}) => {
 
       // Table 7 entry
       if (!table7Map.has(defaultRate)) {
-        table7Map.set(defaultRate, { rate: defaultRate, taxableValue: 0, cgst: 0, sgst: 0, totalValue: 0 });
+        table7Map.set(defaultRate, { 
+          rate: defaultRate, 
+          cgstRate: defaultRate / 2, 
+          sgstRate: defaultRate / 2, 
+          taxableValue: 0, 
+          cgst: 0, 
+          sgst: 0, 
+          totalValue: 0 
+        });
       }
       const t7Row = table7Map.get(defaultRate);
       t7Row.taxableValue += diffTaxable;
@@ -319,10 +341,11 @@ export const generateWhatsAppCAMessage = (monthStr, gstData, shopProfile) => {
   }
   text += `💎 *Taxable Turnover:* ${currency}${t.taxableValue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}\n\n`;
 
-  text += `🏛️ *TAX LIABILITY:*\n`;
+  text += `🏛️ *TAX LIABILITY (Split 50% CGST + 50% SGST):*\n`;
   text += `  • CGST (Central): ${currency}${t.cgst.toLocaleString('en-IN', { maximumFractionDigits: 2 })}\n`;
   text += `  • SGST (State): ${currency}${t.sgst.toLocaleString('en-IN', { maximumFractionDigits: 2 })}\n`;
-  text += `  • *Total GST Payable:* ${currency}${t.totalGST.toLocaleString('en-IN', { maximumFractionDigits: 2 })}\n\n`;
+  text += `  • *Total GST Payable:* ${currency}${t.totalGST.toLocaleString('en-IN', { maximumFractionDigits: 2 })}\n`;
+  text += `  _(Note: 5% tax = 2.5% CGST + 2.5% SGST; 18% tax = 9% CGST + 9% SGST)_\n\n`;
 
   text += `💵 *PAYMENT MODES:*\n`;
   text += `  • Cash: ${currency}${pay.cash.toLocaleString('en-IN', { maximumFractionDigits: 2 })}\n`;
@@ -331,7 +354,7 @@ export const generateWhatsAppCAMessage = (monthStr, gstData, shopProfile) => {
 
   text += `📦 *GSTR-1 TABLE 12 (HSN BREAKDOWN):*\n`;
   (gstData.table12 || []).slice(0, 8).forEach(row => {
-    text += `  • HSN ${row.hsnCode}: ${row.totalQty} ${row.unit} | Gross: ${currency}${row.totalValue.toFixed(2)} | Taxable: ${currency}${row.taxableValue.toFixed(2)} | GST (${row.rate}%): ${currency}${row.totalTax.toFixed(2)}\n`;
+    text += `  • HSN ${row.hsnCode}: ${row.totalQty} ${row.unit} | Gross: ${currency}${row.totalValue.toFixed(2)} | Taxable: ${currency}${row.taxableValue.toFixed(2)} | GST ${row.rate}% (${row.cgstRate}%+${row.sgstRate}%): ${currency}${row.totalTax.toFixed(2)}\n`;
   });
 
   if ((gstData.table12 || []).length > 8) {
@@ -355,7 +378,8 @@ export const generateGSTR1CSV = (monthStr, gstData, shopProfile) => {
   csv += `Store Name,"${(shopProfile.name || '').replace(/"/g, '""')}"\n`;
   csv += `GSTIN,"${shopProfile.gstin || ''}"\n`;
   csv += `State / Place of Supply,"${pos}"\n`;
-  csv += `Due Date,"${getGSTR1DueDate(monthStr)}"\n\n`;
+  csv += `Due Date,"${getGSTR1DueDate(monthStr)}"\n`;
+  csv += `Tax Note,"Standard 5% GST represents 2.5% CGST + 2.5% SGST"\n\n`;
 
   csv += `=== SUMMARY METRICS ===\n`;
   csv += `Gross Turnover,${gstData.turnover.grossSales.toFixed(2)}\n`;
@@ -370,16 +394,16 @@ export const generateGSTR1CSV = (monthStr, gstData, shopProfile) => {
   csv += `Card Tender,${gstData.tenders.card.toFixed(2)}\n\n`;
 
   csv += `=== GSTR-1 TABLE 12: HSN-WISE SUMMARY OF OUTWARD SUPPLIES ===\n`;
-  csv += `HSN Code,Description,UQC (Unit),Total Quantity,Total Value,Taxable Value,Integrated Tax (IGST),Central Tax (CGST),State Tax (SGST),Total Tax,GST Rate (%)\n`;
+  csv += `HSN Code,Description,UQC (Unit),Total Quantity,Total Value,Taxable Value,Integrated Tax (IGST),Central Tax (CGST),State Tax (SGST),Total Tax,Total GST Rate (%),CGST Rate (%),SGST Rate (%)\n`;
   gstData.table12.forEach(row => {
-    csv += `"${row.hsnCode}","${(row.description || '').replace(/"/g, '""')}","${row.uqc}",${row.totalQty},${row.totalValue.toFixed(2)},${row.taxableValue.toFixed(2)},0.00,${row.cgst.toFixed(2)},${row.sgst.toFixed(2)},${row.totalTax.toFixed(2)},${row.rate}\n`;
+    csv += `"${row.hsnCode}","${(row.description || '').replace(/"/g, '""')}","${row.uqc}",${row.totalQty},${row.totalValue.toFixed(2)},${row.taxableValue.toFixed(2)},0.00,${row.cgst.toFixed(2)},${row.sgst.toFixed(2)},${row.totalTax.toFixed(2)},${row.rate}%,${row.cgstRate}%,${row.sgstRate}%\n`;
   });
   csv += `\n`;
 
   csv += `=== GSTR-1 TABLE 7: B2C (SMALL) DETAILS BY RATE SLAB ===\n`;
-  csv += `Type,Place of Supply,Rate (%),Taxable Value,Central Tax (CGST),State Tax (SGST),Total Invoice Value\n`;
+  csv += `Type,Place of Supply,Total GST Rate (%),CGST Rate (%),SGST Rate (%),Taxable Value,Central Tax (CGST),State Tax (SGST),Total Invoice Value\n`;
   gstData.table7.forEach(row => {
-    csv += `"B2C Intra-State","${pos}",${row.rate}%,${row.taxableValue.toFixed(2)},${row.cgst.toFixed(2)},${row.sgst.toFixed(2)},${row.totalValue.toFixed(2)}\n`;
+    csv += `"B2C Intra-State","${pos}",${row.rate}%,${row.cgstRate}%,${row.sgstRate}%,${row.taxableValue.toFixed(2)},${row.cgst.toFixed(2)},${row.sgst.toFixed(2)},${row.totalValue.toFixed(2)}\n`;
   });
 
   return csv;

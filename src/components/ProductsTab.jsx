@@ -210,7 +210,7 @@ export const ProductsTab = () => {
                       <span>•</span>
                       <span>Unit: {product.unit || 'pcs'}</span>
                       <span>•</span>
-                      <span>GST: {product.taxRate ?? 18}%</span>
+                      <span>GST: {product.taxRate ?? 5}% ({(product.taxRate ?? 5)/2}% + {(product.taxRate ?? 5)/2}%)</span>
                     </div>
                   </div>
 
@@ -405,14 +405,17 @@ export const ProductsTab = () => {
                   <select
                     value={formData.taxRate}
                     onChange={(e) => setFormData({ ...formData, taxRate: e.target.value })}
-                    className="w-full bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-xl px-2 py-2 text-neutral-900 dark:text-zinc-100 outline-none"
+                    className="w-full bg-neutral-50 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-xl px-2 py-2 text-neutral-900 dark:text-zinc-100 outline-none text-xs"
                   >
-                    <option value="0">0%</option>
-                    <option value="5">5%</option>
-                    <option value="12">12%</option>
-                    <option value="18">18%</option>
-                    <option value="28">28%</option>
+                    <option value="0">0% (Nil / Exempt)</option>
+                    <option value="5">5% Total (2.5% CGST + 2.5% SGST - Fabrics)</option>
+                    <option value="12">12% Total (6% CGST + 6% SGST - Garments &gt; ₹1000)</option>
+                    <option value="18">18% Total (9% CGST + 9% SGST - General Retail)</option>
+                    <option value="28">28% Total (14% CGST + 14% SGST - Luxury)</option>
                   </select>
+                  <p className="text-[10px] text-neutral-500 dark:text-zinc-400 mt-1">
+                    Note: 5% GST = 2.5% CGST + 2.5% SGST (Never 5% + 5%).
+                  </p>
                 </div>
 
                 <div>

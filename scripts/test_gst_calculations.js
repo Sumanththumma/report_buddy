@@ -66,6 +66,26 @@ async function testGSTEngine() {
     throw new Error('CGST must equal SGST for intra-state supplies');
   }
 
+  // Explicit 50/50 Tax Split Assertion (e.g. 5% means 2.5% CGST + 2.5% SGST, NOT 5% + 5%)
+  gstData.table12.forEach(row => {
+    if (row.cgstRate !== row.rate / 2 || row.sgstRate !== row.rate / 2) {
+      throw new Error(`Table 12 row rate split error for HSN ${row.hsnCode}: expected ${row.rate / 2}% each, got ${row.cgstRate}% and ${row.sgstRate}%`);
+    }
+  });
+
+  const slab5 = gstData.table7.find(r => r.rate === 5);
+  if (slab5) {
+    if (slab5.cgstRate !== 2.5 || slab5.sgstRate !== 2.5) {
+      throw new Error(`5% slab must split into 2.5% CGST and 2.5% SGST! Got CGST: ${slab5.cgstRate}%, SGST: ${slab5.sgstRate}%`);
+    }
+    const computedTax = slab5.cgst + slab5.sgst;
+    const expectedTax = slab5.taxableValue * 0.05;
+    if (Math.abs(computedTax - expectedTax) > 0.10) {
+      throw new Error(`Total 5% slab tax must equal 5% of taxable value, not 10%! Computed: ${computedTax}, Expected: ${expectedTax}`);
+    }
+    console.log(`\nVerified 5% Slab Split: 2.5% CGST (₹${slab5.cgst.toFixed(2)}) + 2.5% SGST (₹${slab5.sgst.toFixed(2)}) = Total 5% (₹${computedTax.toFixed(2)} on ₹${slab5.taxableValue.toFixed(2)} taxable value)`);
+  }
+
   console.log('\n>>> ALL GST AUDIT CHECKS PASSED SUCCESSFULLY! <<<');
 }
 

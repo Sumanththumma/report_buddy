@@ -227,9 +227,13 @@ export const GSTFilingView = ({
           <p className="font-display font-bold text-base sm:text-lg text-rust-700 dark:text-rust-300">
             {currency}{gstData.turnover.totalGST.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
           </p>
-          <span className="text-[10px] text-rust-700 dark:text-rust-300/80 block">
-            CGST {currency}{gstData.turnover.cgst.toFixed(2)} + SGST {currency}{gstData.turnover.sgst.toFixed(2)}
-          </span>
+          <div className="text-[10px] text-rust-700 dark:text-rust-300/80 space-y-0.5">
+            <div>CGST (Central): {currency}{gstData.turnover.cgst.toFixed(2)}</div>
+            <div>SGST (State): {currency}{gstData.turnover.sgst.toFixed(2)}</div>
+            <div className="text-[9px] text-neutral-500 dark:text-zinc-400 italic pt-0.5">
+              5% GST = 2.5% CGST + 2.5% SGST (50/50 split)
+            </div>
+          </div>
         </div>
 
         <div className="bg-white dark:bg-zinc-900 rounded-3xl p-3.5 border border-neutral-200/80 dark:border-zinc-800/80 shadow-2xs space-y-1">
@@ -322,9 +326,9 @@ export const GSTFilingView = ({
                   <th className="py-2.5 px-3 text-right">Qty</th>
                   <th className="py-2.5 px-3 text-right">Gross Value</th>
                   <th className="py-2.5 px-3 text-right">Taxable Value</th>
-                  <th className="py-2.5 px-3 text-right">Rate</th>
-                  <th className="py-2.5 px-3 text-right">CGST</th>
-                  <th className="py-2.5 px-3 text-right">SGST</th>
+                  <th className="py-2.5 px-3 text-right">Total GST</th>
+                  <th className="py-2.5 px-3 text-right">CGST (Central)</th>
+                  <th className="py-2.5 px-3 text-right">SGST (State)</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-zinc-800/60 font-sans">
@@ -354,14 +358,23 @@ export const GSTFilingView = ({
                     <td className="py-2.5 px-3 text-right font-display font-semibold text-neutral-900 dark:text-neutral-100">
                       {currency}{row.taxableValue.toFixed(2)}
                     </td>
-                    <td className="py-2.5 px-3 text-right text-neutral-600 dark:text-zinc-400">
+                    <td className="py-2.5 px-3 text-right text-neutral-800 dark:text-zinc-200 font-medium">
                       {row.rate}%
+                      <span className="text-[10px] text-neutral-400 block font-normal font-sans">
+                        ({row.cgstRate}% + {row.sgstRate}%)
+                      </span>
                     </td>
                     <td className="py-2.5 px-3 text-right font-mono text-neutral-800 dark:text-zinc-200">
                       {currency}{row.cgst.toFixed(2)}
+                      <span className="text-[10px] text-neutral-400 block font-normal font-sans">
+                        @ {row.cgstRate}%
+                      </span>
                     </td>
                     <td className="py-2.5 px-3 text-right font-mono text-neutral-800 dark:text-zinc-200">
                       {currency}{row.sgst.toFixed(2)}
+                      <span className="text-[10px] text-neutral-400 block font-normal font-sans">
+                        @ {row.sgstRate}%
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -389,10 +402,10 @@ export const GSTFilingView = ({
                 <tr className="border-b border-neutral-200/80 dark:border-zinc-800 text-neutral-600 dark:text-zinc-400 font-display font-semibold">
                   <th className="py-2.5 px-3">Type</th>
                   <th className="py-2.5 px-3">Place of Supply</th>
-                  <th className="py-2.5 px-3 text-right">GST Rate</th>
+                  <th className="py-2.5 px-3 text-right">Total GST Slab</th>
                   <th className="py-2.5 px-3 text-right">Taxable Value</th>
-                  <th className="py-2.5 px-3 text-right">CGST</th>
-                  <th className="py-2.5 px-3 text-right">SGST</th>
+                  <th className="py-2.5 px-3 text-right">CGST (Central)</th>
+                  <th className="py-2.5 px-3 text-right">SGST (State)</th>
                   <th className="py-2.5 px-3 text-right">Total Invoice Value</th>
                 </tr>
               </thead>
@@ -407,15 +420,24 @@ export const GSTFilingView = ({
                     </td>
                     <td className="py-2.5 px-3 text-right font-display font-bold text-neutral-900 dark:text-neutral-100">
                       {row.rate}%
+                      <span className="text-[10px] text-neutral-500 font-normal block font-sans">
+                        {row.cgstRate}% CGST + {row.sgstRate}% SGST
+                      </span>
                     </td>
                     <td className="py-2.5 px-3 text-right font-display font-semibold text-neutral-900 dark:text-neutral-100">
                       {currency}{row.taxableValue.toFixed(2)}
                     </td>
                     <td className="py-2.5 px-3 text-right font-mono text-neutral-800 dark:text-zinc-200">
                       {currency}{row.cgst.toFixed(2)}
+                      <span className="text-[10px] text-neutral-400 block font-normal font-sans">
+                        @ {row.cgstRate}%
+                      </span>
                     </td>
                     <td className="py-2.5 px-3 text-right font-mono text-neutral-800 dark:text-zinc-200">
                       {currency}{row.sgst.toFixed(2)}
+                      <span className="text-[10px] text-neutral-400 block font-normal font-sans">
+                        @ {row.sgstRate}%
+                      </span>
                     </td>
                     <td className="py-2.5 px-3 text-right font-display font-bold text-neutral-900 dark:text-neutral-100">
                       {currency}{row.totalValue.toFixed(2)}
@@ -478,12 +500,15 @@ export const GSTFilingView = ({
                   onChange={(e) => setNewTaxRateInput(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl bg-neutral-100 dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 text-xs font-display font-semibold text-neutral-900 dark:text-neutral-100 outline-none focus:border-rust-500"
                 >
-                  <option value="0">0% (Exempt)</option>
-                  <option value="5">5% (Fabrics & Daily Wear)</option>
-                  <option value="12">12% (Apparel above ₹1,000 / Accessories)</option>
-                  <option value="18">18% (General Retail / Electronics)</option>
-                  <option value="28">28% (Luxury Goods)</option>
+                  <option value="0">0% (Nil / Exempt)</option>
+                  <option value="5">5% Total (2.5% CGST + 2.5% SGST - Fabrics)</option>
+                  <option value="12">12% Total (6% CGST + 6% SGST - Apparel &gt; ₹1,000)</option>
+                  <option value="18">18% Total (9% CGST + 9% SGST - General Retail)</option>
+                  <option value="28">28% Total (14% CGST + 14% SGST - Luxury)</option>
                 </select>
+                <p className="text-[10px] text-neutral-500 dark:text-zinc-400 mt-1">
+                  Note: A 5% GST slab is split 50/50: 2.5% Central (CGST) + 2.5% State (SGST).
+                </p>
               </div>
             </div>
 
