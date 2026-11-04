@@ -11,6 +11,7 @@ import {
   Printer,
   RefreshCw,
   AlertTriangle,
+  RotateCcw,
   X
 } from 'lucide-react';
 
@@ -38,7 +39,9 @@ export const DailyJournalTab = () => {
     setSelectedJournalDate, 
     setActiveTab, 
     shopProfile, 
-    deleteZReport 
+    deleteZReport,
+    trashReports,
+    restoreZReport 
   } = useApp();
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -54,6 +57,7 @@ export const DailyJournalTab = () => {
   };
 
   const currentReport = zReports.find(r => r.date === selectedJournalDate);
+  const trashReportForDate = (trashReports || []).find(t => t.date === selectedJournalDate);
 
   const curDateObj = parseLocalDate(selectedJournalDate);
   const formattedDisplay = curDateObj.toLocaleDateString('en-US', {
@@ -390,6 +394,28 @@ export const DailyJournalTab = () => {
               Click below to scan or upload the cash register Z-Report specifically for this date.
             </p>
           </div>
+
+          {trashReportForDate && (
+            <div className="p-3.5 rounded-2xl bg-amber-500/10 dark:bg-amber-950/30 border border-amber-500/20 dark:border-amber-800/40 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-left animate-fade-in">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-1.5 text-xs font-display font-bold text-amber-800 dark:text-amber-300">
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Deleted Report in Recycle Bin
+                </div>
+                <p className="text-[11px] text-neutral-600 dark:text-zinc-400">
+                  Report #{trashReportForDate.reportNumber || 'Z-Report'} • Net: {shopProfile.currency}{trashReportForDate.netSales?.toLocaleString()} ({trashReportForDate.items?.length || 0} line items)
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => restoreZReport(selectedJournalDate)}
+                className="py-2 px-3.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-display font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95 shrink-0"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                Restore Report
+              </button>
+            </div>
+          )}
 
           <div className="pt-2 max-w-xs mx-auto">
             <button

@@ -38,24 +38,34 @@ const DEMO_PRODUCT_NAMES = new Set([
   'handcrafted leather belt'
 ]);
 
+const getUserCacheKey = (prefix, user) => {
+  if (user?.id) return `${prefix}_${user.id}`;
+  if (user?.email) return `${prefix}_${user.email.replace(/[@.]/g, '_')}`;
+  return `${prefix}_guest`;
+};
+
 const sanitizeProducts = (list, userEmail = null) => {
   if (!Array.isArray(list)) return [];
   const isDemoStore = userEmail === 'demo@retailstore.com';
   return list.filter(p => {
     if (!p || !p.name) return false;
-    const cleanName = p.name.trim().toLowerCase();
-    if (!isDemoStore && (DEMO_PRODUCT_IDS.has(p.id) || p.id?.startsWith('p-') || p.id?.startsWith('demo-'))) return false;
-    if (!isDemoStore && DEMO_PRODUCT_NAMES.has(cleanName)) return false;
+    if (!isDemoStore && (p.id?.startsWith('demo-') || p.id?.startsWith('p-') || DEMO_PRODUCT_IDS.has(p.id))) {
+      return false;
+    }
     return true;
   });
 };
 
-const sanitizeZReports = (list, isDemoStore = false) => {
+const sanitizeZReports = (list, currentUserId = null) => {
   if (!Array.isArray(list)) return [];
   return list.filter(r => {
     if (!r || !r.date) return false;
-    // Only filter the demo seed report for non-demo stores
-    if (!isDemoStore && r.storeName === 'Smart Retail Store' && r.reportNumber === 'Z-0048') return false;
+    // Any report that belongs to this active user is ALWAYS kept
+    if (currentUserId && (r.userId === currentUserId || r.user_id === currentUserId)) return true;
+    // Suppress demo mock reports for non-demo users
+    if (currentUserId !== 'demo-shop-owner-001' && (r.userId === 'demo-shop-owner-001' || r.user_id === 'demo-shop-owner-001' || (r.storeName === 'Smart Retail Store' && r.reportNumber === 'Z-0048'))) {
+      return false;
+    }
     return true;
   });
 };
@@ -68,11 +78,10 @@ export const AppProvider = ({ children }) => {
 
   const [products, setProducts] = useState(() => {
     try {
-      const saved = localStorage.getItem('retail_products');
+      const key = getUserCacheKey('retail_products', user);
+      const saved = localStorage.getItem(key) || (!user ? localStorage.getItem('retail_products') : null);
       if (saved) {
-        const clean = sanitizeProducts(JSON.parse(saved));
-        localStorage.setItem('retail_products', JSON.stringify(clean));
-        return clean;
+        return sanitizeProducts(JSON.parse(saved), user?.email);
       }
     } catch {}
     return FALLBACK_PRODUCTS;
@@ -80,14 +89,23 @@ export const AppProvider = ({ children }) => {
 
   const [zReports, setZReports] = useState(() => {
     try {
-      const saved = localStorage.getItem('retail_z_reports');
+      const key = getUserCacheKey('retail_z_reports', user);
+      const saved = localStorage.getItem(key) || (!user ? localStorage.getItem('retail_z_reports') : null);
       if (saved) {
-        const clean = sanitizeZReports(JSON.parse(saved));
-        localStorage.setItem('retail_z_reports', JSON.stringify(clean));
-        return clean;
+        return sanitizeZReports(JSON.parse(saved), user?.id);
       }
     } catch {}
     return FALLBACK_Z_REPORTS;
+  });
+
+  const [trashReports, setTrashReports] = useState(() => {
+    try {
+      const key = getUserCacheKey('retail_z_trash', user);
+      const saved = localStorage.getItem(key);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
   });
 
   const [geminiApiKey, setGeminiApiKey] = useState(() => {
@@ -126,6 +144,29 @@ export const AppProvider = ({ children }) => {
     tagline: user?.tagline || 'Your neighborhood retail shop'
   };
 
+  // Switch or clear caches when authenticated user changes
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setProducts([]);
+      setZReports([]);
+      setTrashReports([]);
+      return;
+    }
+    try {
+      const pKey = getUserCacheKey('retail_products', user);
+      const savedP = localStorage.getItem(pKey);
+      if (savedP) setProducts(sanitizeProducts(JSON.parse(savedP), user?.email));
+
+      const rKey = getUserCacheKey('retail_z_reports', user);
+      const savedR = localStorage.getItem(rKey);
+      if (savedR) setZReports(sanitizeZReports(JSON.parse(savedR), user?.id));
+
+      const tKey = getUserCacheKey('retail_z_trash', user);
+      const savedT = localStorage.getItem(tKey);
+      if (savedT) setTrashReports(JSON.parse(savedT));
+    } catch {}
+  }, [user?.id, isAuthenticated]);
+
   // Synchronize with backend database when user changes or logs in
   useEffect(() => {
     const fetchRemoteData = async () => {
@@ -142,16 +183,15 @@ export const AppProvider = ({ children }) => {
         if (prodRes.products) {
           const cleanProds = sanitizeProducts(prodRes.products, user?.email);
           setProducts(cleanProds);
-          localStorage.setItem('retail_products', JSON.stringify(cleanProds));
+          localStorage.setItem(getUserCacheKey('retail_products', user), JSON.stringify(cleanProds));
         }
 
         // Fetch authoritative Z-reports from persistent database
         const zRes = await zReportsApi.getAll();
         if (zRes.zReports) {
-          const isDemo = user?.email === 'demo@retailstore.com' || user?.shop_name === 'Smart Retail Store';
-          const cleanReports = sanitizeZReports(zRes.zReports, isDemo);
+          const cleanReports = sanitizeZReports(zRes.zReports, user?.id);
           setZReports(cleanReports);
-          localStorage.setItem('retail_z_reports', JSON.stringify(cleanReports));
+          localStorage.setItem(getUserCacheKey('retail_z_reports', user), JSON.stringify(cleanReports));
         }
 
         // Check persistence health status
@@ -173,14 +213,28 @@ export const AppProvider = ({ children }) => {
     fetchRemoteData();
   }, [isAuthenticated, user?.id, user?.gemini_api_key]);
 
-  // Sync state to LocalStorage as offline backup cache
+  // Sync state to LocalStorage as user-scoped offline backup cache
   useEffect(() => {
-    localStorage.setItem('retail_products', JSON.stringify(products));
-  }, [products]);
+    if (user?.id) {
+      localStorage.setItem(getUserCacheKey('retail_products', user), JSON.stringify(products));
+    } else {
+      localStorage.setItem('retail_products', JSON.stringify(products));
+    }
+  }, [products, user?.id]);
 
   useEffect(() => {
-    localStorage.setItem('retail_z_reports', JSON.stringify(zReports));
-  }, [zReports]);
+    if (user?.id) {
+      localStorage.setItem(getUserCacheKey('retail_z_reports', user), JSON.stringify(zReports));
+    } else {
+      localStorage.setItem('retail_z_reports', JSON.stringify(zReports));
+    }
+  }, [zReports, user?.id]);
+
+  useEffect(() => {
+    if (user?.id) {
+      localStorage.setItem(getUserCacheKey('retail_z_trash', user), JSON.stringify(trashReports));
+    }
+  }, [trashReports, user?.id]);
 
   useEffect(() => {
     localStorage.setItem('gemini_free_api_key', geminiApiKey);
@@ -402,6 +456,15 @@ export const AppProvider = ({ children }) => {
       }
     }
 
+    // Clean up any trash entry for this date
+    setTrashReports(prev => {
+      const updated = prev.filter(t => t.date !== reportDate && t.id !== reportId);
+      try {
+        localStorage.setItem(getUserCacheKey('retail_z_trash', user), JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
     if (addedCount > 0) {
       showToast(`Z-Report saved! ${addedCount} new product${addedCount > 1 ? 's' : ''} added to catalog.`);
     } else {
@@ -414,20 +477,39 @@ export const AppProvider = ({ children }) => {
     const reportToDelete = zReports.find(r => r.id === reportIdOrDate || r.date === reportIdOrDate);
     const targetDate = targetDateOverride || reportToDelete?.date || (typeof reportIdOrDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(reportIdOrDate) ? reportIdOrDate : null);
 
+    // 1. Move to Safety Recycle Bin / Trash first so data is NEVER lost
+    if (reportToDelete) {
+      setTrashReports(prevTrash => {
+        const itemToArchive = {
+          ...reportToDelete,
+          deletedAt: new Date().toISOString()
+        };
+        const updated = [itemToArchive, ...prevTrash.filter(t => t.date !== itemToArchive.date && t.id !== itemToArchive.id)].slice(0, 50);
+        try {
+          localStorage.setItem(getUserCacheKey('retail_z_trash', user), JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+    }
+
     setZReports(prev => {
       const filtered = prev.filter(r => r.id !== reportIdOrDate && r.date !== reportIdOrDate && (!targetDate || r.date !== targetDate));
       try {
-        localStorage.setItem('retail_z_reports', JSON.stringify(filtered));
+        localStorage.setItem(getUserCacheKey('retail_z_reports', user), JSON.stringify(filtered));
       } catch {}
       return filtered;
     });
 
     if (isAuthenticated) {
       try {
+        let res;
         if (targetDate) {
-          await zReportsApi.deleteByDate(targetDate);
+          res = await zReportsApi.deleteByDate(targetDate);
         } else {
-          await zReportsApi.delete(reportIdOrDate);
+          res = await zReportsApi.delete(reportIdOrDate);
+        }
+        if (res?.archived && !reportToDelete) {
+          setTrashReports(prev => [res.archived, ...prev.filter(t => t.date !== res.archived.date)].slice(0, 50));
         }
       } catch (err) {
         console.error('Remote DB deletion failed:', err.message);
@@ -435,7 +517,55 @@ export const AppProvider = ({ children }) => {
         return;
       }
     }
-    showToast(`Z-Report for ${targetDate || 'selected day'} permanently deleted.`);
+    showToast(`Z-Report for ${targetDate || 'selected day'} moved to Recycle Bin.`);
+  };
+
+  const restoreZReport = async (targetDate) => {
+    if (!targetDate) return null;
+
+    let restoredReport = null;
+    if (isAuthenticated) {
+      try {
+        const res = await zReportsApi.restoreByDate(targetDate);
+        if (res && res.report) {
+          restoredReport = res.report;
+        }
+      } catch (err) {
+        console.warn('Server restore warning, falling back to local trash:', err.message);
+      }
+    }
+
+    if (!restoredReport) {
+      const fromTrash = trashReports.find(t => t.date === targetDate);
+      if (fromTrash) {
+        restoredReport = await addOrUpdateZReport(fromTrash);
+      }
+    } else {
+      setZReports(prev => {
+        const filtered = prev.filter(r => r.date !== targetDate && r.id !== restoredReport.id);
+        const updated = [restoredReport, ...filtered];
+        try {
+          localStorage.setItem(getUserCacheKey('retail_z_reports', user), JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+    }
+
+    if (restoredReport) {
+      setTrashReports(prev => {
+        const updated = prev.filter(t => t.date !== targetDate && t.id !== restoredReport.id);
+        try {
+          localStorage.setItem(getUserCacheKey('retail_z_trash', user), JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+      setSelectedJournalDate(targetDate);
+      showToast(`Z-Report for ${targetDate} restored successfully!`);
+      return restoredReport;
+    } else {
+      showToast(`No backup found to restore for ${targetDate}`, 'error');
+      return null;
+    }
   };
 
   const updateGeminiApiKey = async (newKey, preferredModel) => {
@@ -609,6 +739,8 @@ export const AppProvider = ({ children }) => {
         deleteProduct,
         addOrUpdateZReport,
         deleteZReport,
+        trashReports,
+        restoreZReport,
         exportMonthlyReportCSV,
         resetToDemoData
       }}

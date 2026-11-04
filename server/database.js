@@ -101,10 +101,21 @@ export const initDatabase = () => {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
     );
 
+    -- Safety Recycle Bin / Trash for deleted Z-Reports (guarantees deleted data can always be restored)
+    CREATE TABLE IF NOT EXISTS z_reports_trash (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      report_data TEXT NOT NULL,
+      deleted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
     -- Indexes for high-speed queries
     CREATE INDEX IF NOT EXISTS idx_products_user ON products(user_id);
     CREATE INDEX IF NOT EXISTS idx_zreports_user_date ON z_reports(user_id, date);
     CREATE INDEX IF NOT EXISTS idx_zreport_items_report ON z_report_items(z_report_id);
+    CREATE INDEX IF NOT EXISTS idx_zreports_trash_user_date ON z_reports_trash(user_id, date);
   `);
 
   // Safe migrations in case the database was created earlier without the new personalization columns
@@ -128,5 +139,8 @@ export const initDatabase = () => {
 
   console.log('✅ SQLite database schema & personalization columns verified at:', dbPath);
 };
+
+// Automatically verify & initialize tables on load
+initDatabase();
 
 export default db;

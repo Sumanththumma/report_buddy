@@ -559,21 +559,28 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
 
   if (isSupabaseEnabled()) {
     // 1. Atomically purge any existing report and items for this date OR with this ID to prevent unique constraint collision
-    const { data: existingReps } = await supabase
+    const { data: dateReps } = await supabase
       .from('z_reports')
       .select('id')
       .eq('user_id', reportData.userId)
-      .or(`date.eq.${targetDate},id.eq.${reportId}`);
+      .eq('date', targetDate);
 
-    const existingIds = (existingReps || []).map(r => r.id);
-    if (!existingIds.includes(reportId)) existingIds.push(reportId);
+    const purgeSet = new Set();
+    (dateReps || []).forEach(r => purgeSet.add(r.id));
+    if (reportId) purgeSet.add(reportId);
 
-    if (existingIds.length > 0) {
-      await supabase.from('z_report_items').delete().in('z_report_id', existingIds);
-      await supabase.from('z_reports').delete().in('id', existingIds);
+    const idsToPurge = Array.from(purgeSet);
+    if (idsToPurge.length > 0) {
+      await supabase.from('z_report_items').delete().in('z_report_id', idsToPurge);
+      await supabase.from('z_reports').delete().in('id', idsToPurge);
     }
     // Delete any remaining report for this date
     await supabase.from('z_reports').delete().eq('user_id', reportData.userId).eq('date', targetDate);
+
+    // Also clean up any trash entry for this date
+    try {
+      db.prepare('DELETE FROM z_reports_trash WHERE user_id = ? AND date = ?').run(reportData.userId, targetDate);
+    } catch (e) {}
 
     // 2. Insert fresh report record
     const { error: repErr } = await supabase.from('z_reports').insert([{
@@ -794,20 +801,83 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
 };
 
 export const deleteZReport = async (idOrDate, userId) => {
-  if (!idOrDate || !userId) return;
+  if (!idOrDate || !userId) return null;
+
+  const isDate = /^\d{4}-\d{2}-\d{2}$/.test(idOrDate);
+  let archivedReport = null;
 
   if (isSupabaseEnabled()) {
-    // Find matching report IDs by id OR date
-    const { data: reports, error: findErr } = await supabase
-      .from('z_reports')
-      .select('id')
-      .eq('user_id', userId)
-      .or(`id.eq.${idOrDate},date.eq.${idOrDate}`);
-    
-    if (findErr) throw findErr;
+    // 1. Fetch full report before deletion for trash preservation
+    let query = supabase.from('z_reports').select('*').eq('user_id', userId);
+    if (isDate) {
+      query = query.eq('date', idOrDate);
+    } else {
+      query = query.or(`id.eq.${idOrDate},date.eq.${idOrDate}`);
+    }
+    const { data: existingReps } = await query;
+    const rep = existingReps?.[0];
 
-    const repIds = (reports || []).map(r => r.id);
-    if (!repIds.includes(idOrDate) && !/^\d{4}-\d{2}-\d{2}$/.test(idOrDate)) {
+    if (rep) {
+      const { data: existingItems } = await supabase
+        .from('z_report_items')
+        .select('*')
+        .eq('z_report_id', rep.id);
+
+      archivedReport = {
+        id: rep.id,
+        date: rep.date,
+        reportNumber: rep.report_number,
+        closingTime: rep.closing_time,
+        storeName: rep.store_name,
+        registerId: rep.register_id,
+        grossSales: parseFloat(rep.gross_sales) || 0,
+        netSales: parseFloat(rep.net_sales) || 0,
+        discount: parseFloat(rep.discount) || 0,
+        taxTotal: parseFloat(rep.tax_total) || 0,
+        totalItemsSold: parseInt(rep.total_items_sold, 10) || 0,
+        paymentBreakdown: {
+          cash: parseFloat(rep.payment_cash) || 0,
+          upi: parseFloat(rep.payment_upi) || 0,
+          card: parseFloat(rep.payment_card) || 0
+        },
+        rawImageUrl: rep.raw_image_url,
+        notes: rep.notes,
+        items: (existingItems || []).map(i => ({
+          id: i.id,
+          name: i.product_name,
+          productName: i.product_name,
+          hsn: i.hsn_code,
+          hsnCode: i.hsn_code,
+          quantity: i.quantity,
+          qty: i.quantity,
+          unit: i.unit || 'pcs',
+          price: parseFloat(i.unit_price) || 0,
+          unitPrice: parseFloat(i.unit_price) || 0,
+          total: parseFloat(i.line_total) || 0,
+          lineTotal: parseFloat(i.line_total) || 0,
+          taxRate: parseFloat(i.tax_rate) || 18
+        }))
+      };
+
+      // Also persist to SQLite trash table as server-side safety net
+      try {
+        db.prepare('DELETE FROM z_reports_trash WHERE user_id = ? AND date = ?').run(userId, rep.date);
+        db.prepare(`
+          INSERT INTO z_reports_trash (id, user_id, date, report_data)
+          VALUES (?, ?, ?, ?)
+        `).run(
+          `trash-${rep.id}-${Date.now()}`,
+          userId,
+          rep.date,
+          JSON.stringify(archivedReport)
+        );
+      } catch (e) {
+        console.warn('Could not archive to local SQLite trash table:', e.message);
+      }
+    }
+
+    const repIds = (existingReps || []).map(r => r.id);
+    if (!repIds.includes(idOrDate) && !isDate) {
       repIds.push(idOrDate);
     }
 
@@ -816,17 +886,66 @@ export const deleteZReport = async (idOrDate, userId) => {
       await supabase.from('z_reports').delete().in('id', repIds);
     }
 
-    // Always ensure date-matched records are removed
-    if (/^\d{4}-\d{2}-\d{2}$/.test(idOrDate)) {
+    if (isDate) {
       await supabase.from('z_reports').delete().eq('user_id', userId).eq('date', idOrDate);
     }
   } else {
-    const isDate = /^\d{4}-\d{2}-\d{2}$/.test(idOrDate);
+    // SQLite mode
     const reports = db.prepare(`
-      SELECT id FROM z_reports WHERE user_id = ? AND (id = ? OR date = ?)
+      SELECT * FROM z_reports WHERE user_id = ? AND (id = ? OR date = ?)
     `).all(userId, idOrDate, idOrDate);
 
     for (const r of reports) {
+      const items = db.prepare('SELECT * FROM z_report_items WHERE z_report_id = ?').all(r.id);
+      archivedReport = {
+        id: r.id,
+        date: r.date,
+        reportNumber: r.report_number,
+        closingTime: r.closing_time,
+        storeName: r.store_name,
+        registerId: r.register_id,
+        grossSales: parseFloat(r.gross_sales) || 0,
+        netSales: parseFloat(r.net_sales) || 0,
+        discount: parseFloat(r.discount) || 0,
+        taxTotal: parseFloat(r.tax_total) || 0,
+        totalItemsSold: parseInt(r.total_items_sold, 10) || 0,
+        paymentBreakdown: {
+          cash: parseFloat(r.payment_cash) || 0,
+          upi: parseFloat(r.payment_upi) || 0,
+          card: parseFloat(r.payment_card) || 0
+        },
+        rawImageUrl: r.raw_image_url,
+        notes: r.notes,
+        items: items.map(i => ({
+          id: i.id,
+          name: i.product_name,
+          productName: i.product_name,
+          hsn: i.hsn_code,
+          hsnCode: i.hsn_code,
+          quantity: i.quantity,
+          qty: i.quantity,
+          unit: i.unit || 'pcs',
+          price: parseFloat(i.unit_price) || 0,
+          unitPrice: parseFloat(i.unit_price) || 0,
+          total: parseFloat(i.line_total) || 0,
+          lineTotal: parseFloat(i.line_total) || 0,
+          taxRate: parseFloat(i.tax_rate) || 18
+        }))
+      };
+
+      try {
+        db.prepare('DELETE FROM z_reports_trash WHERE user_id = ? AND date = ?').run(userId, r.date);
+        db.prepare(`
+          INSERT INTO z_reports_trash (id, user_id, date, report_data)
+          VALUES (?, ?, ?, ?)
+        `).run(
+          `trash-${r.id}-${Date.now()}`,
+          userId,
+          r.date,
+          JSON.stringify(archivedReport)
+        );
+      } catch (e) {}
+
       db.prepare('DELETE FROM z_report_items WHERE z_report_id = ?').run(r.id);
       db.prepare('DELETE FROM z_reports WHERE id = ?').run(r.id);
     }
@@ -836,6 +955,31 @@ export const deleteZReport = async (idOrDate, userId) => {
       db.prepare('DELETE FROM z_reports WHERE id = ? AND user_id = ?').run(idOrDate, userId);
     }
   }
+
+  return archivedReport;
+};
+
+export const restoreZReportFromTrash = async (date, userId) => {
+  if (!date || !userId) return null;
+
+  // Check SQLite trash table for archived snapshot
+  const trashRow = db.prepare('SELECT report_data FROM z_reports_trash WHERE user_id = ? AND date = ? ORDER BY deleted_at DESC LIMIT 1').get(userId, date);
+  if (!trashRow || !trashRow.report_data) return null;
+
+  const reportData = JSON.parse(trashRow.report_data);
+  const items = reportData.items || [];
+
+  const restored = await createZReport({
+    ...reportData,
+    userId
+  }, items);
+
+  // Remove from trash once restored
+  try {
+    db.prepare('DELETE FROM z_reports_trash WHERE user_id = ? AND date = ?').run(userId, date);
+  } catch (e) {}
+
+  return restored;
 };
 
 // -------------------------------------------------------------

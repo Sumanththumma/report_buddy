@@ -511,8 +511,8 @@ app.post('/api/z-reports', requireAuth, async (req, res) => {
 app.delete('/api/z-reports/:id', requireAuth, async (req, res) => {
   try {
     const { id } = req.params;
-    await dbAdapter.deleteZReport(id, req.user.id);
-    res.json({ message: 'Z-Report deleted successfully' });
+    const archived = await dbAdapter.deleteZReport(id, req.user.id);
+    res.json({ message: 'Z-Report deleted successfully', archived });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete report: ' + err.message });
   }
@@ -522,10 +522,29 @@ app.delete('/api/z-reports/:id', requireAuth, async (req, res) => {
 app.delete('/api/z-reports/date/:date', requireAuth, async (req, res) => {
   try {
     const { date } = req.params;
-    await dbAdapter.deleteZReport(date, req.user.id);
-    res.json({ message: `Z-Report for ${date} deleted successfully` });
+    const archived = await dbAdapter.deleteZReport(date, req.user.id);
+    res.json({ message: `Z-Report for ${date} deleted successfully`, archived });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete report for date: ' + err.message });
+  }
+});
+
+// Restore Z-Report from Trash by Date
+app.post('/api/z-reports/restore/:date', requireAuth, async (req, res) => {
+  try {
+    const { date } = req.params;
+    const restored = await dbAdapter.restoreZReportFromTrash(date, req.user.id);
+    if (!restored) {
+      return res.status(404).json({ error: `No deleted report found in trash for ${date}` });
+    }
+    const updatedProducts = await dbAdapter.getProducts(req.user.id);
+    res.json({
+      message: `Z-Report for ${date} restored successfully`,
+      report: restored,
+      products: updatedProducts
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to restore report: ' + err.message });
   }
 });
 
