@@ -50,11 +50,12 @@ const sanitizeProducts = (list, userEmail = null) => {
   });
 };
 
-const sanitizeZReports = (list) => {
+const sanitizeZReports = (list, isDemoStore = false) => {
   if (!Array.isArray(list)) return [];
   return list.filter(r => {
     if (!r || !r.date) return false;
-    if (r.id === 'z-2026-11-01' && r.reportNumber === 'Z-0048') return false;
+    // Only filter the demo seed report for non-demo stores
+    if (!isDemoStore && r.storeName === 'Smart Retail Store' && r.reportNumber === 'Z-0048') return false;
     return true;
   });
 };
@@ -147,7 +148,8 @@ export const AppProvider = ({ children }) => {
         // Fetch authoritative Z-reports from persistent database
         const zRes = await zReportsApi.getAll();
         if (zRes.zReports) {
-          const cleanReports = sanitizeZReports(zRes.zReports);
+          const isDemo = user?.email === 'demo@retailstore.com' || user?.shop_name === 'Smart Retail Store';
+          const cleanReports = sanitizeZReports(zRes.zReports, isDemo);
           setZReports(cleanReports);
           localStorage.setItem('retail_z_reports', JSON.stringify(cleanReports));
         }
@@ -381,7 +383,8 @@ export const AppProvider = ({ children }) => {
         });
         if (res.report) {
           setZReports(prev => {
-            const updated = prev.map(r => (r.date === reportDate || r.id === reportId) ? res.report : r);
+            const filtered = prev.filter(r => r.date !== reportDate && r.id !== reportId && r.id !== res.report.id);
+            const updated = [res.report, ...filtered];
             try {
               localStorage.setItem('retail_z_reports', JSON.stringify(updated));
             } catch {}
