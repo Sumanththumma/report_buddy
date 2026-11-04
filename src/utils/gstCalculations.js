@@ -167,10 +167,12 @@ export const calculateMonthlyGST = (reports = [], shopProfile = {}) => {
       reportItemsGross += lineGross;
       reportItemsQty += qty;
 
-      // Reverse MRP Tax-Inclusive Calculation:
-      // Taxable Value = LineGross / (1 + Rate / 100)
-      const taxable = lineGross / (1 + rate / 100);
-      const tax = lineGross - taxable;
+      // Direct flat percentage calculation:
+      // Tax = LineGross * (Rate / 100)
+      // Taxable Value = LineGross - Tax
+      // CGST = Tax / 2, SGST = Tax / 2
+      const tax = lineGross * (rate / 100);
+      const taxable = lineGross - tax;
       const cgst = tax / 2;
       const sgst = tax / 2;
 
@@ -259,8 +261,8 @@ export const calculateMonthlyGST = (reports = [], shopProfile = {}) => {
     if (diffGross > 0.05) {
       const defaultRate = shopProfile.defaultTaxRate || 5;
       const primaryHsn = shopProfile.primaryHsn || '5208';
-      const diffTaxable = diffGross / (1 + defaultRate / 100);
-      const diffTax = diffGross - diffTaxable;
+      const diffTax = diffGross * (defaultRate / 100);
+      const diffTaxable = diffGross - diffTax;
       const diffCgst = diffTax / 2;
       const diffSgst = diffTax / 2;
       const diffQty = Math.max(1, (parseInt(report.totalItemsSold, 10) || 0) - reportItemsQty);

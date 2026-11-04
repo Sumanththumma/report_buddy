@@ -79,11 +79,18 @@ async function testGSTEngine() {
       throw new Error(`5% slab must split into 2.5% CGST and 2.5% SGST! Got CGST: ${slab5.cgstRate}%, SGST: ${slab5.sgstRate}%`);
     }
     const computedTax = slab5.cgst + slab5.sgst;
-    const expectedTax = slab5.taxableValue * 0.05;
+    const expectedTax = slab5.totalValue * 0.05; // Exact 5% of gross: 46575.50 * 0.05 = 2328.775
     if (Math.abs(computedTax - expectedTax) > 0.10) {
-      throw new Error(`Total 5% slab tax must equal 5% of taxable value, not 10%! Computed: ${computedTax}, Expected: ${expectedTax}`);
+      throw new Error(`Total 5% tax must equal 5% of gross sales! Computed: ${computedTax}, Expected: ${expectedTax}`);
     }
-    console.log(`\nVerified 5% Slab Split: 2.5% CGST (₹${slab5.cgst.toFixed(2)}) + 2.5% SGST (₹${slab5.sgst.toFixed(2)}) = Total 5% (₹${computedTax.toFixed(2)} on ₹${slab5.taxableValue.toFixed(2)} taxable value)`);
+    const expectedCgst = expectedTax / 2;
+    if (Math.abs(slab5.cgst - expectedCgst) > 0.05) {
+      throw new Error(`CGST must equal 5% tax / 2 (2328.775 / 2 = 1164.39)! Computed: ${slab5.cgst}`);
+    }
+    console.log(`\nVerified 5% Direct Calculation: Total Tax = 5% of ₹${slab5.totalValue.toFixed(2)} = ₹${computedTax.toFixed(2)}`);
+    console.log(`  • CGST (2.5%): ₹${slab5.cgst.toFixed(2)} (${computedTax.toFixed(2)} / 2)`);
+    console.log(`  • SGST (2.5%): ₹${slab5.sgst.toFixed(2)} (${computedTax.toFixed(2)} / 2)`);
+    console.log(`  • Taxable Supply Value: ₹${slab5.taxableValue.toFixed(2)} (${slab5.totalValue.toFixed(2)} - ${computedTax.toFixed(2)})`);
   }
 
   console.log('\n>>> ALL GST AUDIT CHECKS PASSED SUCCESSFULLY! <<<');
