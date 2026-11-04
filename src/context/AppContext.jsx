@@ -235,6 +235,12 @@ export const AppProvider = ({ children }) => {
     const reportDate = reportData.date || new Date().toISOString().split('T')[0];
     const reportId = reportData.id || `z-${reportDate}-${Date.now().toString().slice(-4)}`;
 
+    const paymentBreakdown = {
+      cash: parseFloat(reportData.paymentBreakdown?.cash ?? reportData.paymentCash) || 0,
+      upi: parseFloat(reportData.paymentBreakdown?.upi ?? reportData.paymentUpi) || 0,
+      card: parseFloat(reportData.paymentBreakdown?.card ?? reportData.paymentCard) || 0
+    };
+
     const newReport = {
       ...reportData,
       id: reportId,
@@ -243,14 +249,19 @@ export const AppProvider = ({ children }) => {
       netSales: parseFloat(reportData.netSales) || 0,
       discount: parseFloat(reportData.discount) || 0,
       taxTotal: parseFloat(reportData.taxTotal) || 0,
-      totalItemsSold: parseInt(reportData.totalItemsSold) || (reportData.items?.reduce((acc, i) => acc + (parseInt(i.quantity) || 1), 0) || 0),
+      totalItemsSold: parseInt(reportData.totalItemsSold, 10) || (reportData.items?.reduce((acc, i) => acc + (parseInt(i.quantity || i.qty, 10) || 1), 0) || 0),
+      paymentBreakdown,
       uploadedAt: new Date().toISOString()
     };
 
     // Update local Z-reports state immediately for instant responsiveness
     setZReports(prev => {
-      const filtered = prev.filter(r => r.date !== reportDate);
-      return [newReport, ...filtered];
+      const filtered = prev.filter(r => r.date !== reportDate && r.id !== reportId);
+      const updated = [newReport, ...filtered];
+      try {
+        localStorage.setItem('retail_z_reports', JSON.stringify(updated));
+      } catch {}
+      return updated;
     });
 
     // Auto-update analytics active month to this report's month
@@ -280,7 +291,7 @@ export const AppProvider = ({ children }) => {
             const tax = parseFloat(item.taxRate) || 18;
             const unit = item.unit || 'pcs';
             const category = (item.category || 'General').trim();
-            const stock = parseInt(item.stock) || 50;
+            const stock = parseInt(item.stock, 10) || 50;
 
             prodMap.set(key, {
               id: item.id || `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -309,10 +320,22 @@ export const AppProvider = ({ children }) => {
       try {
         const res = await zReportsApi.save({
           ...reportData,
+          id: reportId,
+          date: reportDate,
+          paymentBreakdown,
+          paymentCash: paymentBreakdown.cash,
+          paymentUpi: paymentBreakdown.upi,
+          paymentCard: paymentBreakdown.card,
           newProducts: configuredNewProducts
         });
         if (res.report) {
-          setZReports(prev => prev.map(r => r.date === reportDate ? res.report : r));
+          setZReports(prev => {
+            const updated = prev.map(r => (r.date === reportDate || r.id === reportId) ? res.report : r);
+            try {
+              localStorage.setItem('retail_z_reports', JSON.stringify(updated));
+            } catch {}
+            return updated;
+          });
         }
         if (res.products && Array.isArray(res.products)) {
           const cleanProds = sanitizeProducts(res.products);
@@ -320,7 +343,8 @@ export const AppProvider = ({ children }) => {
           localStorage.setItem('retail_products', JSON.stringify(cleanProds));
         }
       } catch (err) {
-        console.warn('Stored locally in cache, database sync deferred:', err.message);
+        console.error('Database sync failed:', err.message);
+        showToast('Local save complete. Cloud sync warning: ' + err.message, 'warning');
       }
     }
 
@@ -332,18 +356,17 @@ export const AppProvider = ({ children }) => {
     return newReport;
   };
 
-  const deleteZReport = async (reportIdOrDate) => {
+  const deleteZReport = async (reportIdOrDate, targetDateOverride = null) => {
     const reportToDelete = zReports.find(r => r.id === reportIdOrDate || r.date === reportIdOrDate);
-    const targetDate = reportToDelete?.date || (typeof reportIdOrDate === 'string' && reportIdOrDate.length === 10 ? reportIdOrDate : null);
+    const targetDate = targetDateOverride || reportToDelete?.date || (typeof reportIdOrDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(reportIdOrDate) ? reportIdOrDate : null);
 
-    setZReports(prev => prev.filter(r => r.id !== reportIdOrDate && r.date !== reportIdOrDate));
-    
-    // Update local cache
-    try {
-      const stored = JSON.parse(localStorage.getItem('retail_z_reports') || '[]');
-      const filtered = stored.filter(r => r.id !== reportIdOrDate && r.date !== reportIdOrDate);
-      localStorage.setItem('retail_z_reports', JSON.stringify(filtered));
-    } catch {}
+    setZReports(prev => {
+      const filtered = prev.filter(r => r.id !== reportIdOrDate && r.date !== reportIdOrDate && (!targetDate || r.date !== targetDate));
+      try {
+        localStorage.setItem('retail_z_reports', JSON.stringify(filtered));
+      } catch {}
+      return filtered;
+    });
 
     if (isAuthenticated) {
       try {
@@ -353,7 +376,9 @@ export const AppProvider = ({ children }) => {
           await zReportsApi.delete(reportIdOrDate);
         }
       } catch (err) {
-        console.warn('Deleted locally, remote DB sync deferred:', err.message);
+        console.error('Remote DB deletion failed:', err.message);
+        showToast('Local delete completed. Cloud sync warning: ' + err.message, 'warning');
+        return;
       }
     }
     showToast(`Z-Report for ${targetDate || 'selected day'} permanently deleted.`);

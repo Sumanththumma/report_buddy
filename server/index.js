@@ -451,8 +451,8 @@ app.delete('/api/products/:id', requireAuth, async (req, res) => {
 // Get all Z-reports for user (optional filter ?month=YYYY-MM)
 app.get('/api/z-reports', requireAuth, async (req, res) => {
   try {
-    const { month } = req.query;
-    const reports = await dbAdapter.getZReports(req.user.id, month);
+    const { month, limit } = req.query;
+    const reports = await dbAdapter.getZReports(req.user.id, month, limit);
     res.json({ zReports: reports });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch Z-reports: ' + err.message });
@@ -476,12 +476,23 @@ app.get('/api/z-reports/:date', requireAuth, async (req, res) => {
 // Save or Update Z-Report (with itemized breakdown & auto product cataloging)
 app.post('/api/z-reports', requireAuth, async (req, res) => {
   try {
+    const targetDate = req.body.date || new Date().toISOString().split('T')[0];
+    const pBreakdown = req.body.paymentBreakdown || {
+      cash: parseFloat(req.body.paymentCash) || 0,
+      upi: parseFloat(req.body.paymentUpi) || 0,
+      card: parseFloat(req.body.paymentCard) || 0
+    };
+
     const reportData = {
       ...req.body,
       userId: req.user.id,
-      id: req.body.id || `z-${req.body.date || new Date().toISOString().split('T')[0]}-${Date.now().toString().slice(-4)}`,
-      date: req.body.date || new Date().toISOString().split('T')[0],
-      storeName: req.body.storeName || req.user.shop_name || 'Retail Store'
+      id: req.body.id || `z-${targetDate}-${Date.now().toString().slice(-4)}`,
+      date: targetDate,
+      storeName: req.body.storeName || req.user.shop_name || 'Retail Store',
+      paymentBreakdown: pBreakdown,
+      paymentCash: parseFloat(pBreakdown.cash) || 0,
+      paymentUpi: parseFloat(pBreakdown.upi) || 0,
+      paymentCard: parseFloat(pBreakdown.card) || 0
     };
     const saved = await dbAdapter.createZReport(reportData, req.body.items || [], req.body.newProducts || []);
     const updatedProducts = await dbAdapter.getProducts(req.user.id);

@@ -294,17 +294,31 @@ export const deleteProduct = async (id, userId) => {
 // Z-REPORTS OPERATIONS
 // -------------------------------------------------------------
 
-export const getZReports = async (userId, limit = 60) => {
+export const getZReports = async (userId, month = null, limit = 100) => {
+  const parsedLimit = parseInt(limit, 10) || 100;
+  const isMonthFilter = typeof month === 'string' && /^\d{4}-\d{2}$/.test(month.trim());
+
   if (isSupabaseEnabled()) {
-    const { data: reports, error: repErr } = await supabase
+    let query = supabase
       .from('z_reports')
       .select('*')
-      .eq('user_id', userId)
+      .eq('user_id', userId);
+
+    if (isMonthFilter) {
+      const cleanMonth = month.trim();
+      const startOfMonth = `${cleanMonth}-01`;
+      const [year, m] = cleanMonth.split('-').map(Number);
+      const lastDay = new Date(year, m, 0).getDate();
+      const endOfMonth = `${cleanMonth}-${String(lastDay).padStart(2, '0')}`;
+      query = query.gte('date', startOfMonth).lte('date', endOfMonth);
+    }
+
+    const { data: reports, error: repErr } = await query
       .order('date', { ascending: false })
-      .limit(limit);
+      .limit(parsedLimit);
     if (repErr) throw repErr;
 
-    const reportIds = reports.map(r => r.id);
+    const reportIds = (reports || []).map(r => r.id);
     let items = [];
     if (reportIds.length > 0) {
       const { data: itemData, error: itemErr } = await supabase
@@ -315,7 +329,7 @@ export const getZReports = async (userId, limit = 60) => {
       items = itemData || [];
     }
 
-    return reports.map(r => ({
+    return (reports || []).map(r => ({
       id: r.id,
       date: r.date,
       reportNumber: r.report_number,
@@ -326,7 +340,7 @@ export const getZReports = async (userId, limit = 60) => {
       netSales: parseFloat(r.net_sales) || 0,
       discount: parseFloat(r.discount) || 0,
       taxTotal: parseFloat(r.tax_total) || 0,
-      totalItemsSold: parseInt(r.total_items_sold) || 0,
+      totalItemsSold: parseInt(r.total_items_sold, 10) || 0,
       paymentBreakdown: {
         cash: parseFloat(r.payment_cash) || 0,
         upi: parseFloat(r.payment_upi) || 0,
@@ -342,7 +356,7 @@ export const getZReports = async (userId, limit = 60) => {
         hsnCode: i.hsn_code,
         quantity: i.quantity,
         qty: i.quantity,
-        unit: i.unit,
+        unit: i.unit || 'pcs',
         price: parseFloat(i.unit_price) || 0,
         unitPrice: parseFloat(i.unit_price) || 0,
         total: parseFloat(i.line_total) || 0,
@@ -351,27 +365,41 @@ export const getZReports = async (userId, limit = 60) => {
       }))
     }));
   } else {
-    const getItems = db.prepare('SELECT * FROM z_report_items WHERE z_report_id = ?');
-    const reports = db.prepare(`
-      SELECT * FROM z_reports WHERE user_id = ? ORDER BY date DESC LIMIT ?
-    `).all(userId, limit);
+    let reports;
+    if (isMonthFilter) {
+      reports = db.prepare(`
+        SELECT * FROM z_reports 
+        WHERE user_id = ? AND date LIKE ? 
+        ORDER BY date DESC 
+        LIMIT ?
+      `).all(userId, `${month.trim()}%`, parsedLimit);
+    } else {
+      reports = db.prepare(`
+        SELECT * FROM z_reports 
+        WHERE user_id = ? 
+        ORDER BY date DESC 
+        LIMIT ?
+      `).all(userId, parsedLimit);
+    }
 
-    return reports.map(r => ({
+    const getItems = db.prepare('SELECT * FROM z_report_items WHERE z_report_id = ?');
+
+    return (reports || []).map(r => ({
       id: r.id,
       date: r.date,
       reportNumber: r.report_number,
       closingTime: r.closing_time,
       storeName: r.store_name,
       registerId: r.register_id,
-      grossSales: r.gross_sales,
-      netSales: r.net_sales,
-      discount: r.discount,
-      taxTotal: r.tax_total,
-      totalItemsSold: r.total_items_sold,
+      grossSales: parseFloat(r.gross_sales) || 0,
+      netSales: parseFloat(r.net_sales) || 0,
+      discount: parseFloat(r.discount) || 0,
+      taxTotal: parseFloat(r.tax_total) || 0,
+      totalItemsSold: parseInt(r.total_items_sold, 10) || 0,
       paymentBreakdown: {
-        cash: r.payment_cash,
-        upi: r.payment_upi,
-        card: r.payment_card
+        cash: parseFloat(r.payment_cash) || 0,
+        upi: parseFloat(r.payment_upi) || 0,
+        card: parseFloat(r.payment_card) || 0
       },
       rawImageUrl: r.raw_image_url,
       notes: r.notes,
@@ -383,12 +411,12 @@ export const getZReports = async (userId, limit = 60) => {
         hsnCode: i.hsn_code,
         quantity: i.quantity,
         qty: i.quantity,
-        unit: i.unit,
-        price: i.unit_price,
-        unitPrice: i.unit_price,
-        total: i.line_total,
-        lineTotal: i.line_total,
-        taxRate: i.tax_rate
+        unit: i.unit || 'pcs',
+        price: parseFloat(i.unit_price) || 0,
+        unitPrice: parseFloat(i.unit_price) || 0,
+        total: parseFloat(i.line_total) || 0,
+        lineTotal: parseFloat(i.line_total) || 0,
+        taxRate: parseFloat(i.tax_rate) || 18
       }))
     }));
   }
@@ -396,19 +424,22 @@ export const getZReports = async (userId, limit = 60) => {
 
 export const getZReportByDate = async (userId, date) => {
   if (isSupabaseEnabled()) {
-    const { data: report, error } = await supabase
+    const { data: reports, error } = await supabase
       .from('z_reports')
       .select('*')
       .eq('user_id', userId)
       .eq('date', date)
-      .maybeSingle();
+      .order('created_at', { ascending: false })
+      .limit(1);
     if (error) throw error;
-    if (!report) return null;
+    if (!reports || reports.length === 0) return null;
+    const report = reports[0];
 
-    const { data: items } = await supabase
+    const { data: items, error: itemErr } = await supabase
       .from('z_report_items')
       .select('*')
       .eq('z_report_id', report.id);
+    if (itemErr) throw itemErr;
 
     return {
       id: report.id,
@@ -421,20 +452,26 @@ export const getZReportByDate = async (userId, date) => {
       netSales: parseFloat(report.net_sales) || 0,
       discount: parseFloat(report.discount) || 0,
       taxTotal: parseFloat(report.tax_total) || 0,
-      totalItemsSold: parseInt(report.total_items_sold) || 0,
+      totalItemsSold: parseInt(report.total_items_sold, 10) || 0,
       paymentBreakdown: {
         cash: parseFloat(report.payment_cash) || 0,
         upi: parseFloat(report.payment_upi) || 0,
         card: parseFloat(report.payment_card) || 0
       },
+      rawImageUrl: report.raw_image_url,
+      notes: report.notes,
       items: (items || []).map(i => ({
         id: i.id,
         name: i.product_name,
         productName: i.product_name,
+        hsn: i.hsn_code,
         hsnCode: i.hsn_code,
         quantity: i.quantity,
-        unit: i.unit,
+        qty: i.quantity,
+        unit: i.unit || 'pcs',
+        price: parseFloat(i.unit_price) || 0,
         unitPrice: parseFloat(i.unit_price) || 0,
+        total: parseFloat(i.line_total) || 0,
         lineTotal: parseFloat(i.line_total) || 0,
         taxRate: parseFloat(i.tax_rate) || 18
       }))
@@ -450,22 +487,32 @@ export const getZReportByDate = async (userId, date) => {
       closingTime: r.closing_time,
       storeName: r.store_name,
       registerId: r.register_id,
-      grossSales: r.gross_sales,
-      netSales: r.net_sales,
-      discount: r.discount,
-      taxTotal: r.tax_total,
-      totalItemsSold: r.total_items_sold,
-      paymentBreakdown: { cash: r.payment_cash, upi: r.payment_upi, card: r.payment_card },
+      grossSales: parseFloat(r.gross_sales) || 0,
+      netSales: parseFloat(r.net_sales) || 0,
+      discount: parseFloat(r.discount) || 0,
+      taxTotal: parseFloat(r.tax_total) || 0,
+      totalItemsSold: parseInt(r.total_items_sold, 10) || 0,
+      paymentBreakdown: {
+        cash: parseFloat(r.payment_cash) || 0,
+        upi: parseFloat(r.payment_upi) || 0,
+        card: parseFloat(r.payment_card) || 0
+      },
+      rawImageUrl: r.raw_image_url,
+      notes: r.notes,
       items: items.map(i => ({
         id: i.id,
         name: i.product_name,
         productName: i.product_name,
+        hsn: i.hsn_code,
         hsnCode: i.hsn_code,
         quantity: i.quantity,
-        unit: i.unit,
-        unitPrice: i.unit_price,
-        lineTotal: i.line_total,
-        taxRate: i.tax_rate
+        qty: i.quantity,
+        unit: i.unit || 'pcs',
+        price: parseFloat(i.unit_price) || 0,
+        unitPrice: parseFloat(i.unit_price) || 0,
+        total: parseFloat(i.line_total) || 0,
+        lineTotal: parseFloat(i.line_total) || 0,
+        taxRate: parseFloat(i.tax_rate) || 18
       }))
     };
   }
@@ -476,35 +523,60 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
     ? newProducts
     : (reportData.newProducts || []);
 
-  if (isSupabaseEnabled()) {
-    // Delete existing report for this date
-    const existing = await getZReportByDate(reportData.userId, reportData.date);
-    if (existing) {
-      await supabase.from('z_reports').delete().eq('id', existing.id);
-    }
+  const targetDate = reportData.date || new Date().toISOString().split('T')[0];
+  const reportId = reportData.id || `z-${targetDate}-${Date.now().toString().slice(-4)}`;
 
+  const paymentCash = parseFloat(reportData.paymentBreakdown?.cash ?? reportData.paymentCash) || 0;
+  const paymentUpi = parseFloat(reportData.paymentBreakdown?.upi ?? reportData.paymentUpi) || 0;
+  const paymentCard = parseFloat(reportData.paymentBreakdown?.card ?? reportData.paymentCard) || 0;
+  const grossSales = parseFloat(reportData.grossSales) || 0;
+  const netSales = parseFloat(reportData.netSales) || 0;
+  const discount = parseFloat(reportData.discount) || 0;
+  const taxTotal = parseFloat(reportData.taxTotal) || 0;
+  const totalItemsSold = parseInt(reportData.totalItemsSold, 10) || 
+    (items.reduce((acc, i) => acc + (parseInt(i.quantity || i.qty, 10) || 1), 0));
+
+  if (isSupabaseEnabled()) {
+    // 1. Atomically purge any existing report and items for this date OR with this ID to prevent unique constraint collision
+    const { data: existingReps } = await supabase
+      .from('z_reports')
+      .select('id')
+      .eq('user_id', reportData.userId)
+      .or(`date.eq.${targetDate},id.eq.${reportId}`);
+
+    const existingIds = (existingReps || []).map(r => r.id);
+    if (!existingIds.includes(reportId)) existingIds.push(reportId);
+
+    if (existingIds.length > 0) {
+      await supabase.from('z_report_items').delete().in('z_report_id', existingIds);
+      await supabase.from('z_reports').delete().in('id', existingIds);
+    }
+    // Delete any remaining report for this date
+    await supabase.from('z_reports').delete().eq('user_id', reportData.userId).eq('date', targetDate);
+
+    // 2. Insert fresh report record
     const { error: repErr } = await supabase.from('z_reports').insert([{
-      id: reportData.id,
+      id: reportId,
       user_id: reportData.userId,
-      date: reportData.date,
-      report_number: reportData.reportNumber,
-      closing_time: reportData.closingTime,
-      store_name: reportData.storeName,
-      register_id: reportData.registerId,
-      gross_sales: reportData.grossSales,
-      net_sales: reportData.netSales,
-      discount: reportData.discount,
-      tax_total: reportData.taxTotal,
-      total_items_sold: reportData.totalItemsSold,
-      payment_cash: reportData.paymentCash,
-      payment_upi: reportData.paymentUpi,
-      payment_card: reportData.paymentCard,
-      raw_image_url: reportData.rawImageUrl,
-      notes: reportData.notes
+      date: targetDate,
+      report_number: reportData.reportNumber || 'Z-Report',
+      closing_time: reportData.closingTime || '21:30',
+      store_name: reportData.storeName || 'Retail Store',
+      register_id: reportData.registerId || 'REG-01',
+      gross_sales: grossSales,
+      net_sales: netSales,
+      discount: discount,
+      tax_total: taxTotal,
+      total_items_sold: totalItemsSold,
+      payment_cash: paymentCash,
+      payment_upi: paymentUpi,
+      payment_card: paymentCard,
+      raw_image_url: reportData.rawImageUrl || null,
+      notes: reportData.notes || null
     }]);
     if (repErr) throw repErr;
 
-    // Fetch existing catalog products to uphold the Holy Grail principle
+    // 3. Fetch existing catalog products to uphold the Holy Grail principle
     const { data: existingProds } = await supabase
       .from('products')
       .select('id, name, price, stock, hsn_code, category, unit, tax_rate')
@@ -513,8 +585,9 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
     const prodMap = new Map();
     (existingProds || []).forEach(p => prodMap.set((p.name || '').toLowerCase().trim(), p));
 
+    // 4. Insert line items with guaranteed unique primary keys
     if (items.length > 0) {
-      const formattedItems = items.map(i => {
+      const formattedItems = items.map((i, idx) => {
         const rawName = (i.productName || i.name || '').trim();
         const key = rawName.toLowerCase();
         // Holy Grail: Inherit curated details (HSN, GST rate, Unit) from catalog if product matches
@@ -525,12 +598,12 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
         const resolvedUnit = catalogMatch?.unit || i.unit || 'pcs';
 
         return {
-          id: i.id || `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-          z_report_id: reportData.id,
+          id: `item-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 9)}`,
+          z_report_id: reportId,
           user_id: reportData.userId,
           product_name: resolvedName,
           hsn_code: resolvedHsn,
-          quantity: parseInt(i.quantity || i.qty) || 1,
+          quantity: parseInt(i.quantity || i.qty, 10) || 1,
           unit: resolvedUnit,
           unit_price: parseFloat(i.unitPrice || i.price) || 0,
           line_total: parseFloat(i.lineTotal || i.total) || 0,
@@ -541,7 +614,7 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
       if (itemErr) throw itemErr;
     }
 
-    // Process user-reviewed / manually categorized new products
+    // 5. Process user-reviewed / manually categorized new products
     // Holy Grail Principle: Existing catalog products must never be overwritten or modified by receipt scans!
     // Only genuinely new items (not merged into existing varieties) get inserted into the catalog.
     if (configuredProducts.length > 0) {
@@ -560,7 +633,7 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
         const tax = parseFloat(prod.taxRate) || 18;
         const unit = prod.unit || 'pcs';
         const category = (prod.category || 'General').trim();
-        const stock = parseInt(prod.stock) || 50;
+        const stock = parseInt(prod.stock, 10) || 50;
 
         const newProdId = `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
         await supabase.from('products').insert([{
@@ -579,13 +652,19 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
       }
     }
 
-    return getZReportByDate(reportData.userId, reportData.date);
+    return getZReportByDate(reportData.userId, targetDate);
   } else {
-    const existing = db.prepare('SELECT id FROM z_reports WHERE user_id = ? AND date = ?').get(reportData.userId, reportData.date);
-    if (existing) {
-      db.prepare('DELETE FROM z_report_items WHERE z_report_id = ?').run(existing.id);
-      db.prepare('DELETE FROM z_reports WHERE id = ?').run(existing.id);
+    // SQLite: Clean up any existing reports for this date or ID
+    const existingReps = db.prepare(`
+      SELECT id FROM z_reports WHERE user_id = ? AND (date = ? OR id = ?)
+    `).all(reportData.userId, targetDate, reportId);
+
+    for (const r of existingReps) {
+      db.prepare('DELETE FROM z_report_items WHERE z_report_id = ?').run(r.id);
+      db.prepare('DELETE FROM z_reports WHERE id = ?').run(r.id);
     }
+    db.prepare('DELETE FROM z_report_items WHERE z_report_id = ?').run(reportId);
+    db.prepare('DELETE FROM z_reports WHERE id = ? AND user_id = ?').run(reportId, reportData.userId);
 
     db.prepare(`
       INSERT INTO z_reports (
@@ -594,23 +673,23 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
         payment_cash, payment_upi, payment_card, raw_image_url, notes
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      reportData.id,
+      reportId,
       reportData.userId,
-      reportData.date,
-      reportData.reportNumber,
-      reportData.closingTime,
-      reportData.storeName,
-      reportData.registerId,
-      reportData.grossSales,
-      reportData.netSales,
-      reportData.discount,
-      reportData.taxTotal,
-      reportData.totalItemsSold,
-      reportData.paymentCash,
-      reportData.paymentUpi,
-      reportData.paymentCard,
-      reportData.rawImageUrl,
-      reportData.notes
+      targetDate,
+      reportData.reportNumber || 'Z-Report',
+      reportData.closingTime || '21:30',
+      reportData.storeName || 'Retail Store',
+      reportData.registerId || 'REG-01',
+      grossSales,
+      netSales,
+      discount,
+      taxTotal,
+      totalItemsSold,
+      paymentCash,
+      paymentUpi,
+      paymentCard,
+      reportData.rawImageUrl || null,
+      reportData.notes || null
     );
 
     // Fetch existing catalog products for SQLite to uphold Holy Grail
@@ -623,7 +702,7 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    for (const item of items) {
+    items.forEach((item, idx) => {
       const rawName = (item.productName || item.name || '').trim();
       const key = rawName.toLowerCase();
       const catalogMatch = prodMap.get(key);
@@ -632,12 +711,12 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
       const resolvedTax = catalogMatch?.tax_rate ?? (parseFloat(item.taxRate) || 18);
       const resolvedUnit = catalogMatch?.unit || item.unit || 'pcs';
       const uPrice = parseFloat(item.unitPrice || item.price) || 0;
-      const qty = parseInt(item.quantity || item.qty) || 1;
+      const qty = parseInt(item.quantity || item.qty, 10) || 1;
       const lTotal = parseFloat(item.lineTotal || item.total) || 0;
 
       insertItem.run(
-        item.id || `item-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        reportData.id,
+        `item-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 9)}`,
+        reportId,
         reportData.userId,
         resolvedName,
         resolvedHsn,
@@ -647,7 +726,7 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
         lTotal,
         resolvedTax
       );
-    }
+    });
 
     // Process user-reviewed / manually categorized new products for SQLite
     // Holy Grail: DO NOT overwrite existing products. Only insert genuinely new items.
@@ -670,7 +749,7 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
         const tax = parseFloat(prod.taxRate) || 18;
         const unit = prod.unit || 'pcs';
         const category = (prod.category || 'General').trim();
-        const stock = parseInt(prod.stock) || 50;
+        const stock = parseInt(prod.stock, 10) || 50;
 
         const newId = `prod-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
         insertNewProd.run(
@@ -689,42 +768,49 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
       }
     }
 
-    return getZReportByDate(reportData.userId, reportData.date);
+    return getZReportByDate(reportData.userId, targetDate);
   }
 };
 
 export const deleteZReport = async (idOrDate, userId) => {
+  if (!idOrDate || !userId) return;
+
   if (isSupabaseEnabled()) {
-    const isDate = /^\d{4}-\d{2}-\d{2}$/.test(idOrDate);
-    let reportId = idOrDate;
-    if (isDate) {
-      const { data: rep } = await supabase
-        .from('z_reports')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('date', idOrDate)
-        .maybeSingle();
-      if (rep) reportId = rep.id;
+    // Find matching report IDs by id OR date
+    const { data: reports, error: findErr } = await supabase
+      .from('z_reports')
+      .select('id')
+      .eq('user_id', userId)
+      .or(`id.eq.${idOrDate},date.eq.${idOrDate}`);
+    
+    if (findErr) throw findErr;
+
+    const repIds = (reports || []).map(r => r.id);
+    if (!repIds.includes(idOrDate) && !/^\d{4}-\d{2}-\d{2}$/.test(idOrDate)) {
+      repIds.push(idOrDate);
     }
 
-    // Always delete line items first
-    await supabase.from('z_report_items').delete().eq('z_report_id', reportId);
-    if (isDate) {
-      const { error } = await supabase.from('z_reports').delete().eq('user_id', userId).eq('date', idOrDate);
-      if (error) throw error;
-    } else {
-      const { error } = await supabase.from('z_reports').delete().eq('id', reportId).eq('user_id', userId);
-      if (error) throw error;
+    if (repIds.length > 0) {
+      await supabase.from('z_report_items').delete().in('z_report_id', repIds);
+      await supabase.from('z_reports').delete().in('id', repIds);
+    }
+
+    // Always ensure date-matched records are removed
+    if (/^\d{4}-\d{2}-\d{2}$/.test(idOrDate)) {
+      await supabase.from('z_reports').delete().eq('user_id', userId).eq('date', idOrDate);
     }
   } else {
     const isDate = /^\d{4}-\d{2}-\d{2}$/.test(idOrDate);
-    if (isDate) {
-      const rep = db.prepare('SELECT id FROM z_reports WHERE user_id = ? AND date = ?').get(userId, idOrDate);
-      if (rep) {
-        db.prepare('DELETE FROM z_report_items WHERE z_report_id = ?').run(rep.id);
-        db.prepare('DELETE FROM z_reports WHERE id = ?').run(rep.id);
-      }
-    } else {
+    const reports = db.prepare(`
+      SELECT id FROM z_reports WHERE user_id = ? AND (id = ? OR date = ?)
+    `).all(userId, idOrDate, idOrDate);
+
+    for (const r of reports) {
+      db.prepare('DELETE FROM z_report_items WHERE z_report_id = ?').run(r.id);
+      db.prepare('DELETE FROM z_reports WHERE id = ?').run(r.id);
+    }
+
+    if (reports.length === 0 && !isDate) {
       db.prepare('DELETE FROM z_report_items WHERE z_report_id = ?').run(idOrDate);
       db.prepare('DELETE FROM z_reports WHERE id = ? AND user_id = ?').run(idOrDate, userId);
     }
@@ -823,9 +909,14 @@ export const importBackupData = async (userId, backupData) => {
         discount: r.discount,
         taxTotal: r.taxTotal,
         totalItemsSold: r.totalItemsSold,
-        paymentCash: r.paymentBreakdown?.cash ?? r.cash,
-        paymentUpi: r.paymentBreakdown?.upi ?? r.upi,
-        paymentCard: r.paymentBreakdown?.card ?? r.card,
+        paymentCash: r.paymentBreakdown?.cash ?? r.paymentCash ?? r.cash,
+        paymentUpi: r.paymentBreakdown?.upi ?? r.paymentUpi ?? r.upi,
+        paymentCard: r.paymentBreakdown?.card ?? r.paymentCard ?? r.card,
+        paymentBreakdown: r.paymentBreakdown || {
+          cash: parseFloat(r.paymentCash ?? r.cash) || 0,
+          upi: parseFloat(r.paymentUpi ?? r.upi) || 0,
+          card: parseFloat(r.paymentCard ?? r.card) || 0
+        },
         rawImageUrl: r.rawImageUrl,
         notes: r.notes
       }, r.items || []);

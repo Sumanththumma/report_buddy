@@ -421,15 +421,17 @@ export const AIScanTab = ({ onOpenSettings }) => {
       return item;
     });
 
+    const targetReportDate = extractedZReport.date || selectedJournalDate || new Date().toISOString().split('T')[0];
     const reportToSave = {
       ...extractedZReport,
+      date: targetReportDate,
       items: finalItems
     };
 
     // Holy Grail: Only genuine new products (action !== 'merge' and addToCatalog === true) are sent to catalog
     const productsToCatalog = newProductsConfig.filter(p => p.action !== 'merge' && p.addToCatalog);
     const saved = await addOrUpdateZReport(reportToSave, productsToCatalog);
-    setSelectedJournalDate(saved.date);
+    setSelectedJournalDate(saved.date || targetReportDate);
     setActiveTab('daily_journal');
 
     setExtractedZReport(null);

@@ -279,7 +279,10 @@ export const DailyJournalTab = () => {
 
               <div className="grid grid-cols-2 gap-2 pt-1">
                 <button
-                  onClick={() => setActiveTab('ai_scan')}
+                  onClick={() => {
+                    setSelectedJournalDate(currentReport.date || selectedJournalDate);
+                    setActiveTab('ai_scan');
+                  }}
                   className="py-2 px-3 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-zinc-800 dark:hover:bg-zinc-750 text-neutral-800 dark:text-zinc-200 font-display font-semibold text-xs flex items-center justify-center gap-1.5 transition-all border border-neutral-200/80 dark:border-zinc-700 active:scale-95"
                 >
                   <RefreshCw className="w-3.5 h-3.5 text-rust-600 dark:text-rust-400" />
@@ -289,7 +292,7 @@ export const DailyJournalTab = () => {
                 <button
                   onClick={() => {
                     if (confirm(`Permanently delete the Z-Report for ${formattedDisplay}?\n\nThis will remove the report and its line items. You will be able to re-upload a new scan for this date anytime.`)) {
-                      deleteZReport(currentReport.id || selectedJournalDate);
+                      deleteZReport(currentReport.id || selectedJournalDate, currentReport.date || selectedJournalDate);
                     }
                   }}
                   className="py-2 px-3 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 font-display font-semibold text-xs flex items-center justify-center gap-1.5 transition-all border border-red-200 dark:border-red-800/50 active:scale-95"
