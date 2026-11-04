@@ -213,7 +213,7 @@ app.post('/api/auth/register', async (req, res) => {
       receiptFooter,
       gstin, 
       currency = '₹',
-      seedStarterProducts = true
+      seedStarterProducts = false
     } = req.body;
 
     if (!email || !password || !shopName) {
@@ -246,8 +246,8 @@ app.post('/api/auth/register', async (req, res) => {
       role: 'owner'
     });
 
-    // Auto-seed industry-specific starter products if requested
-    if (seedStarterProducts) {
+    // Auto-seed industry-specific starter products only if explicitly requested
+    if (seedStarterProducts === true) {
       const starterList = CATEGORY_STARTER_PRODUCTS[storeCategory] || CATEGORY_STARTER_PRODUCTS['General Retail'];
       for (const p of starterList) {
         await dbAdapter.createProduct({

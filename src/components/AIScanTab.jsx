@@ -40,6 +40,28 @@ const COMMON_CATEGORIES = [
   'General Retail'
 ];
 
+// Receipt non-product noise filter (headers, footers, tax summaries, payment tenders, etc.)
+const RECEIPT_NOISE_TERMS = new Set([
+  'subtotal', 'sub total', 'total', 'grand total', 'net total', 'gross total',
+  'gross sales', 'net sales', 'net amount', 'total sales', 'total amount',
+  'cash', 'upi', 'card', 'change', 'discount', 'gst', 'tax', 'cgst', 'sgst', 'igst',
+  'vat', 'round off', 'round', 'balance', 'items', 'item count', 'tender',
+  'taxable', 'bill no', 'invoice', 'thank you', 'date', 'time', 'plu',
+  'dept', 'department', 'void', 'refund', 'no sale', 'pos', 'register',
+  'summary', 'report', 'operator', 'cashier', 'terminal', 'customer', 'item', 'credit', 'debit'
+]);
+
+export const isReceiptNoise = (name) => {
+  if (!name || typeof name !== 'string') return true;
+  const clean = name.trim().toLowerCase();
+  if (clean.length < 2) return true;
+  if (RECEIPT_NOISE_TERMS.has(clean)) return true;
+  return Array.from(RECEIPT_NOISE_TERMS).some(term => {
+    const regex = new RegExp(`^${term}$|^${term}\\s+|\\s+${term}$`, 'i');
+    return regex.test(clean);
+  });
+};
+
 export const AIScanTab = ({ onOpenSettings }) => {
   const { 
     geminiApiKey, 
@@ -76,6 +98,7 @@ export const AIScanTab = ({ onOpenSettings }) => {
     itemsList.forEach(item => {
       const name = (item.productName || item.name || '').trim();
       if (!name) return;
+      if (isReceiptNoise(name)) return;
       const lower = name.toLowerCase();
 
       if (!existingMap.has(lower) && !seen.has(lower)) {
@@ -86,14 +109,14 @@ export const AIScanTab = ({ onOpenSettings }) => {
           name: name,
           action: 'new', // 'new' | 'merge'
           mergedIntoProductId: '',
-          category: '', // User must enter if action === 'new'
+          category: '', // User must enter if action === 'new' and addToCatalog === true
           price: parseFloat(item.unitPrice || item.price) || 0,
           costPrice: Math.round((parseFloat(item.unitPrice || item.price) || 0) * 0.7),
           taxRate: parseFloat(item.taxRate) || 18,
           hsnCode: item.hsnCode || item.hsn || '999999',
           unit: item.unit || 'pcs',
           stock: 50,
-          addToCatalog: true
+          addToCatalog: false // Protection: Unchecked by default so user catalogue is never polluted
         });
       }
     });
@@ -178,21 +201,28 @@ export const AIScanTab = ({ onOpenSettings }) => {
       (products || []).forEach(p => existingMap.set((p.name || '').toLowerCase().trim(), p));
 
       if (Array.isArray(data.items)) {
-        data.items = data.items.map(item => {
-          const key = (item.productName || item.name || '').trim().toLowerCase();
-          const match = existingMap.get(key);
-          if (match) {
-            return {
-              ...item,
-              productName: match.name,
-              hsnCode: match.hsnCode || match.hsn_code || item.hsnCode || '999999',
-              taxRate: match.taxRate ?? item.taxRate ?? 18,
-              unit: match.unit || item.unit || 'pcs',
-              isNewProduct: false
-            };
-          }
-          return { ...item, isNewProduct: true };
-        });
+        data.items = data.items
+          .filter(item => {
+            const rawName = (item.productName || item.name || '').trim();
+            if (!rawName) return false;
+            if (isReceiptNoise(rawName)) return false;
+            return true;
+          })
+          .map(item => {
+            const key = (item.productName || item.name || '').trim().toLowerCase();
+            const match = existingMap.get(key);
+            if (match) {
+              return {
+                ...item,
+                productName: match.name,
+                hsnCode: match.hsnCode || match.hsn_code || item.hsnCode || '999999',
+                taxRate: match.taxRate ?? item.taxRate ?? 18,
+                unit: match.unit || item.unit || 'pcs',
+                isNewProduct: false
+              };
+            }
+            return { ...item, isNewProduct: true };
+          });
       }
 
       setExtractedZReport(data);
@@ -229,21 +259,28 @@ export const AIScanTab = ({ onOpenSettings }) => {
     (products || []).forEach(p => existingMap.set((p.name || '').toLowerCase().trim(), p));
 
     if (Array.isArray(fallbackData.items)) {
-      fallbackData.items = fallbackData.items.map(item => {
-        const key = (item.productName || item.name || '').trim().toLowerCase();
-        const match = existingMap.get(key);
-        if (match) {
-          return {
-            ...item,
-            productName: match.name,
-            hsnCode: match.hsnCode || match.hsn_code || item.hsnCode || '999999',
-            taxRate: match.taxRate ?? item.taxRate ?? 18,
-            unit: match.unit || item.unit || 'pcs',
-            isNewProduct: false
-          };
-        }
-        return { ...item, isNewProduct: true };
-      });
+      fallbackData.items = fallbackData.items
+        .filter(item => {
+          const rawName = (item.productName || item.name || '').trim();
+          if (!rawName) return false;
+          if (isReceiptNoise(rawName)) return false;
+          return true;
+        })
+        .map(item => {
+          const key = (item.productName || item.name || '').trim().toLowerCase();
+          const match = existingMap.get(key);
+          if (match) {
+            return {
+              ...item,
+              productName: match.name,
+              hsnCode: match.hsnCode || match.hsn_code || item.hsnCode || '999999',
+              taxRate: match.taxRate ?? item.taxRate ?? 18,
+              unit: match.unit || item.unit || 'pcs',
+              isNewProduct: false
+            };
+          }
+          return { ...item, isNewProduct: true };
+        });
     }
 
     setExtractedZReport(fallbackData);
@@ -765,19 +802,19 @@ export const AIScanTab = ({ onOpenSettings }) => {
                     <span className="flex h-2 w-2 rounded-full bg-rust-600 animate-ping" />
                     <span className="font-display font-bold text-xs text-rust-900 dark:text-rust-200 uppercase tracking-wider flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-rust-600 dark:text-rust-400" />
-                      {newProductsConfig.length} New Product{newProductsConfig.length > 1 ? 's' : ''} Discovered
+                      {newProductsConfig.length} Unmatched Item{newProductsConfig.length > 1 ? 's' : ''} on Receipt
                     </span>
                   </div>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                    unCategorizedCount === 0 && unMergedCount === 0
-                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800'
-                      : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-800'
+                    newProductsConfig.filter(p => p.action !== 'merge' && p.addToCatalog).length > 0
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 dark:border-amber-800'
+                      : 'bg-neutral-100 text-neutral-800 dark:bg-zinc-800 dark:text-zinc-300 border-neutral-300 dark:border-zinc-700'
                   }`}>
-                    {newProductsConfig.length - (unCategorizedCount + unMergedCount)} of {newProductsConfig.length} Ready
+                    {newProductsConfig.filter(p => p.action !== 'merge' && p.addToCatalog).length} Selected for Catalog
                   </span>
                 </div>
                 <p className="text-[11px] text-neutral-700 dark:text-zinc-300 font-sans leading-relaxed">
-                  These items were found on your Z-report and are not in your store catalog. Choose to <strong>Add as New Product</strong> (enter category) or <strong>Merge into an Existing Product</strong> if it is a color/size variety.
+                  These items are recorded in today's sales report. To protect your catalogue from clutter, receipt items are <strong>not added to your catalogue</strong> by default. Tick <em>"Save to Store Catalog"</em> only for genuine products you want to keep permanently, or merge varieties into your existing products.
                 </p>
               </div>
 

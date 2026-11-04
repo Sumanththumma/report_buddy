@@ -518,6 +518,27 @@ export const getZReportByDate = async (userId, date) => {
   }
 };
 
+const RECEIPT_NOISE_TERMS = new Set([
+  'subtotal', 'sub total', 'total', 'grand total', 'net total', 'gross total',
+  'gross sales', 'net sales', 'net amount', 'total sales', 'total amount',
+  'cash', 'upi', 'card', 'change', 'discount', 'gst', 'tax', 'cgst', 'sgst', 'igst',
+  'vat', 'round off', 'round', 'balance', 'items', 'item count', 'tender',
+  'taxable', 'bill no', 'invoice', 'thank you', 'date', 'time', 'plu',
+  'dept', 'department', 'void', 'refund', 'no sale', 'pos', 'register',
+  'summary', 'report', 'operator', 'cashier', 'terminal', 'customer', 'item', 'credit', 'debit'
+]);
+
+const isNoiseName = (name) => {
+  if (!name || typeof name !== 'string') return true;
+  const clean = name.trim().toLowerCase();
+  if (clean.length < 2) return true;
+  if (RECEIPT_NOISE_TERMS.has(clean)) return true;
+  return Array.from(RECEIPT_NOISE_TERMS).some(term => {
+    const regex = new RegExp(`^${term}$|^${term}\\s+|\\s+${term}$`, 'i');
+    return regex.test(clean);
+  });
+};
+
 export const createZReport = async (reportData, items = [], newProducts = []) => {
   const configuredProducts = (newProducts && newProducts.length > 0)
     ? newProducts
@@ -621,7 +642,7 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
       for (const prod of configuredProducts) {
         if (prod.addToCatalog === false || prod.action === 'merge') continue;
         const prodName = (prod.name || prod.productName || '').trim();
-        if (!prodName) continue;
+        if (!prodName || isNoiseName(prodName)) continue;
         const key = prodName.toLowerCase();
 
         // If it already exists in the catalog, DO NOT alter its details (Holy Grail)
@@ -739,7 +760,7 @@ export const createZReport = async (reportData, items = [], newProducts = []) =>
       for (const prod of configuredProducts) {
         if (prod.addToCatalog === false || prod.action === 'merge') continue;
         const prodName = (prod.name || prod.productName || '').trim();
-        if (!prodName) continue;
+        if (!prodName || isNoiseName(prodName)) continue;
         const key = prodName.toLowerCase();
         if (prodMap.has(key)) continue; // Holy Grail: Existing product remains untouched
 
@@ -938,15 +959,39 @@ export const bulkSync = async (userId, products = [], zReports = []) => {
     'cotton polo t-shirt',
     'wireless bluetooth earbuds',
     'usb-c braided fast cable 65w',
-    'wireless optical mouse'
+    'wireless optical mouse',
+    'organic wildflower honey 500g',
+    'ceramic designer coffee mug',
+    'premium basmati rice 5kg',
+    'fast charging power bank 20000mah',
+    'cotton crew t-shirt',
+    'slim fit denim jeans',
+    'casual cotton shirt',
+    'fleece zipper hoodie',
+    'ankle cotton socks 3-pack',
+    'ergonomic optical mouse',
+    'hdmi 2.1 ultra high speed cable',
+    'cold pressed sunflower oil 1l',
+    'organic raw honey 500g',
+    'roasted cashew nuts 500g',
+    'whole wheat atta 10kg',
+    'smart led bulb 12w b22',
+    '4-socket spike extension board',
+    'pvc insulation electrical tape',
+    'precision screwdriver set 8-in-1',
+    'designer silk scarf',
+    'handcrafted leather belt'
   ]);
-  const DEMO_IDS = new Set(['prod-1', 'prod-2', 'prod-3', 'prod-4']);
+  const DEMO_IDS = new Set([
+    'prod-1', 'prod-2', 'prod-3', 'prod-4',
+    'p-1', 'p-2', 'p-3', 'p-4', 'p-5', 'p-6', 'p-7', 'p-8'
+  ]);
 
   if (Array.isArray(products)) {
     for (const p of products) {
       if (!p || !p.name) continue;
       const lowerName = p.name.toLowerCase().trim();
-      if (DEMO_NAMES.has(lowerName) || DEMO_IDS.has(p.id)) continue;
+      if (DEMO_NAMES.has(lowerName) || DEMO_IDS.has(p.id) || p.id?.startsWith('p-') || isNoiseName(lowerName)) continue;
 
       if (!currentProdsByName.has(lowerName)) {
         await createProduct({

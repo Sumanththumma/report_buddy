@@ -42,7 +42,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login' }) => {
   const [regData, setRegData] = useState({
     shopName: '',
     ownerName: '',
-    storeCategory: 'Electronics & Gadgets',
+    storeCategory: 'General Retail',
     tagline: 'Your trusted neighborhood store',
     logoIcon: 'Store',
     themeColor: 'zinc',
@@ -50,7 +50,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login' }) => {
     password: '',
     gstin: '',
     currency: '₹',
-    seedStarterProducts: true
+    seedStarterProducts: false
   });
 
   if (!isOpen) return null;
@@ -436,10 +436,10 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login' }) => {
                   <div className="text-[11px]">
                     <span className="font-semibold text-neutral-900 dark:text-neutral-100 flex items-center gap-1">
                       <PackagePlus className="w-3.5 h-3.5 text-neutral-600 dark:text-zinc-400" />
-                      Pre-load starter products with HSN codes
+                      Pre-load starter sample products (Optional)
                     </span>
                     <span className="text-neutral-600 dark:text-zinc-400 block text-[10px]">
-                      Seeds 5 industry items tailored to {regData.storeCategory}.
+                      Leave unchecked to start with a 100% clean, empty catalogue for your store.
                     </span>
                   </div>
                 </label>

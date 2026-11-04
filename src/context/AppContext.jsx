@@ -5,20 +5,47 @@ import { productsApi, zReportsApi, backupApi } from '../services/api';
 const AppContext = createContext();
 
 // Authoritative holy grail catalog: Never pre-populate demo electronics into real user shops
-const DEMO_PRODUCT_IDS = new Set(['prod-1', 'prod-2', 'prod-3', 'prod-4']);
+const DEMO_PRODUCT_IDS = new Set([
+  'prod-1', 'prod-2', 'prod-3', 'prod-4',
+  'p-1', 'p-2', 'p-3', 'p-4', 'p-5', 'p-6', 'p-7', 'p-8'
+]);
+
 const DEMO_PRODUCT_NAMES = new Set([
   'cotton polo t-shirt',
   'wireless bluetooth earbuds',
   'usb-c braided fast cable 65w',
-  'wireless optical mouse'
+  'wireless optical mouse',
+  'organic wildflower honey 500g',
+  'ceramic designer coffee mug',
+  'premium basmati rice 5kg',
+  'fast charging power bank 20000mah',
+  'cotton crew t-shirt',
+  'slim fit denim jeans',
+  'casual cotton shirt',
+  'fleece zipper hoodie',
+  'ankle cotton socks 3-pack',
+  'ergonomic optical mouse',
+  'hdmi 2.1 ultra high speed cable',
+  'cold pressed sunflower oil 1l',
+  'organic raw honey 500g',
+  'roasted cashew nuts 500g',
+  'whole wheat atta 10kg',
+  'smart led bulb 12w b22',
+  '4-socket spike extension board',
+  'pvc insulation electrical tape',
+  'precision screwdriver set 8-in-1',
+  'designer silk scarf',
+  'handcrafted leather belt'
 ]);
 
-const sanitizeProducts = (list) => {
+const sanitizeProducts = (list, userEmail = null) => {
   if (!Array.isArray(list)) return [];
+  const isDemoStore = userEmail === 'demo@retailstore.com';
   return list.filter(p => {
     if (!p || !p.name) return false;
-    if (DEMO_PRODUCT_IDS.has(p.id)) return false;
-    if (DEMO_PRODUCT_NAMES.has(p.name.trim().toLowerCase())) return false;
+    const cleanName = p.name.trim().toLowerCase();
+    if (!isDemoStore && (DEMO_PRODUCT_IDS.has(p.id) || p.id?.startsWith('p-') || p.id?.startsWith('demo-'))) return false;
+    if (!isDemoStore && DEMO_PRODUCT_NAMES.has(cleanName)) return false;
     return true;
   });
 };
@@ -112,7 +139,7 @@ export const AppProvider = ({ children }) => {
         // Fetch authoritative products from persistent database
         const prodRes = await productsApi.getAll();
         if (prodRes.products) {
-          const cleanProds = sanitizeProducts(prodRes.products);
+          const cleanProds = sanitizeProducts(prodRes.products, user?.email);
           setProducts(cleanProds);
           localStorage.setItem('retail_products', JSON.stringify(cleanProds));
         }
@@ -170,17 +197,29 @@ export const AppProvider = ({ children }) => {
       price: parseFloat(newProd.price) || 0,
       costPrice: parseFloat(newProd.costPrice) || 0,
       taxRate: parseFloat(newProd.taxRate) || 0,
-      stock: parseInt(newProd.stock) || 0,
+      stock: parseInt(newProd.stock, 10) || 0,
       updatedAt: new Date().toISOString()
     };
 
-    setProducts(prev => [localProduct, ...prev]);
+    setProducts(prev => {
+      const updated = [localProduct, ...prev];
+      try {
+        localStorage.setItem('retail_products', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
 
     if (isAuthenticated) {
       try {
         const res = await productsApi.add(newProd);
         if (res.product) {
-          setProducts(prev => prev.map(p => p.id === localProduct.id ? res.product : p));
+          setProducts(prev => {
+            const updated = prev.map(p => p.id === localProduct.id ? res.product : p);
+            try {
+              localStorage.setItem('retail_products', JSON.stringify(updated));
+            } catch {}
+            return updated;
+          });
         }
       } catch (err) {
         console.warn('Saved locally, remote DB sync deferred:', err.message);
@@ -192,20 +231,26 @@ export const AppProvider = ({ children }) => {
   };
 
   const updateProduct = async (id, updatedFields) => {
-    setProducts(prev => prev.map(p => {
-      if (p.id === id) {
-        return {
-          ...p,
-          ...updatedFields,
-          price: parseFloat(updatedFields.price ?? p.price) || 0,
-          costPrice: parseFloat(updatedFields.costPrice ?? p.costPrice) || 0,
-          taxRate: parseFloat(updatedFields.taxRate ?? p.taxRate) || 0,
-          stock: parseInt(updatedFields.stock ?? p.stock) || 0,
-          updatedAt: new Date().toISOString()
-        };
-      }
-      return p;
-    }));
+    setProducts(prev => {
+      const updated = prev.map(p => {
+        if (p.id === id) {
+          return {
+            ...p,
+            ...updatedFields,
+            price: parseFloat(updatedFields.price ?? p.price) || 0,
+            costPrice: parseFloat(updatedFields.costPrice ?? p.costPrice) || 0,
+            taxRate: parseFloat(updatedFields.taxRate ?? p.taxRate) || 0,
+            stock: parseInt(updatedFields.stock ?? p.stock, 10) || 0,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return p;
+      });
+      try {
+        localStorage.setItem('retail_products', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
 
     if (isAuthenticated) {
       try {
@@ -219,7 +264,13 @@ export const AppProvider = ({ children }) => {
   };
 
   const deleteProduct = async (id) => {
-    setProducts(prev => prev.filter(p => p.id !== id));
+    setProducts(prev => {
+      const filtered = prev.filter(p => p.id !== id);
+      try {
+        localStorage.setItem('retail_products', JSON.stringify(filtered));
+      } catch {}
+      return filtered;
+    });
     if (isAuthenticated) {
       try {
         await productsApi.delete(id);
