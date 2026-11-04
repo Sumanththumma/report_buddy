@@ -37,6 +37,17 @@ export const GSTFilingView = ({
   const [editingItemHsn, setEditingItemHsn] = useState(null);
   const [newHsnInput, setNewHsnInput] = useState('');
   const [newTaxRateInput, setNewTaxRateInput] = useState('5');
+  const [itcInput, setItcInput] = useState('');
+  const [expandedHsns, setExpandedHsns] = useState(new Set(['5208']));
+
+  const toggleHsnExpand = (hsn) => {
+    setExpandedHsns(prev => {
+      const next = new Set(prev);
+      if (next.has(hsn)) next.delete(hsn);
+      else next.add(hsn);
+      return next;
+    });
+  };
 
   const gstData = calculateMonthlyGST(monthReports, shopProfile);
   const currency = shopProfile.currency || '₹';
@@ -249,37 +260,83 @@ export const GSTFilingView = ({
         </div>
       </div>
 
-      {/* Tender Breakdown Reconciliation Card */}
-      <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 border border-neutral-200/80 dark:border-zinc-800/80 shadow-2xs space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5">
-            <Coins className="w-3.5 h-3.5 text-neutral-500" />
-            Tender / Payment Reconciliation
-          </h3>
-          <span className="text-[11px] font-mono text-neutral-500">
-            Total: {currency}{gstData.tenders.totalTendered.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-          </span>
+      {/* Tender Breakdown & GSTR-3B Liability Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 print:grid-cols-2">
+        {/* Tender Breakdown Reconciliation Card */}
+        <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 border border-neutral-200/80 dark:border-zinc-800/80 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5">
+              <Coins className="w-3.5 h-3.5 text-neutral-500" />
+              Tender Reconciliation (Bank & Cash)
+            </h3>
+            <span className="text-[11px] font-mono text-neutral-500">
+              Total: {currency}{gstData.tenders.totalTendered.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <div className="p-2.5 rounded-2xl bg-neutral-50 dark:bg-zinc-850/60 border border-neutral-100 dark:border-zinc-800 text-center">
+              <span className="text-[10px] text-neutral-500 block uppercase font-medium">Cash</span>
+              <p className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 mt-0.5">
+                {currency}{gstData.tenders.cash.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div className="p-2.5 rounded-2xl bg-neutral-50 dark:bg-zinc-850/60 border border-neutral-100 dark:border-zinc-800 text-center">
+              <span className="text-[10px] text-neutral-500 block uppercase font-medium">UPI / QR</span>
+              <p className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 mt-0.5">
+                {currency}{gstData.tenders.upi.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div className="p-2.5 rounded-2xl bg-neutral-50 dark:bg-zinc-850/60 border border-neutral-100 dark:border-zinc-800 text-center">
+              <span className="text-[10px] text-neutral-500 block uppercase font-medium">Card / POS</span>
+              <p className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 mt-0.5">
+                {currency}{gstData.tenders.card.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+              </p>
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
-          <div className="p-2.5 rounded-2xl bg-neutral-50 dark:bg-zinc-850/60 border border-neutral-100 dark:border-zinc-800 text-center">
-            <span className="text-[10px] text-neutral-500 block uppercase font-medium">Cash</span>
-            <p className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 mt-0.5">
-              {currency}{gstData.tenders.cash.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-            </p>
+        {/* GSTR-3B Net Cash Liability Estimator Card */}
+        <div className="bg-white dark:bg-zinc-900 rounded-3xl p-4 border border-rust-200/80 dark:border-rust-800/60 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 flex items-center gap-1.5">
+              <Receipt className="w-3.5 h-3.5 text-rust-600 dark:text-rust-400" />
+              GSTR-3B Net Liability Estimator
+            </h3>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-rust-50 dark:bg-rust-950/60 text-rust-700 dark:text-rust-300 font-semibold border border-rust-200 dark:border-rust-800">
+              Tax Month: {monthDisplay}
+            </span>
           </div>
-          <div className="p-2.5 rounded-2xl bg-neutral-50 dark:bg-zinc-850/60 border border-neutral-100 dark:border-zinc-800 text-center">
-            <span className="text-[10px] text-neutral-500 block uppercase font-medium">UPI / QR</span>
-            <p className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 mt-0.5">
-              {currency}{gstData.tenders.upi.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-            </p>
+
+          <div className="grid grid-cols-3 gap-2 text-center text-xs">
+            <div className="p-2 rounded-2xl bg-neutral-50 dark:bg-zinc-850/60 border border-neutral-100 dark:border-zinc-800">
+              <span className="text-[9px] uppercase font-semibold text-neutral-500 block">Output GST</span>
+              <p className="font-display font-bold text-xs text-rust-700 dark:text-rust-300 mt-0.5">
+                {currency}{gstData.turnover.totalGST.toFixed(2)}
+              </p>
+            </div>
+
+            <div className="p-2 rounded-2xl bg-neutral-50 dark:bg-zinc-850/60 border border-neutral-100 dark:border-zinc-800">
+              <span className="text-[9px] uppercase font-semibold text-neutral-500 block">Less: GSTR-2B ITC</span>
+              <input
+                type="number"
+                placeholder="₹0.00"
+                value={itcInput}
+                onChange={(e) => setItcInput(e.target.value)}
+                className="w-full text-center font-display font-bold text-xs text-emerald-600 dark:text-emerald-400 bg-white dark:bg-zinc-800 border border-neutral-200 dark:border-zinc-700 rounded-lg py-0.5 mt-0.5 outline-none focus:border-rust-500"
+              />
+            </div>
+
+            <div className="p-2 rounded-2xl bg-neutral-900 text-white dark:bg-zinc-800 border border-neutral-700">
+              <span className="text-[9px] uppercase font-semibold text-neutral-400 block">Net Cash Challan</span>
+              <p className="font-display font-bold text-xs text-emerald-400 mt-0.5">
+                {currency}{Math.max(0, gstData.turnover.totalGST - (parseFloat(itcInput) || 0)).toFixed(2)}
+              </p>
+            </div>
           </div>
-          <div className="p-2.5 rounded-2xl bg-neutral-50 dark:bg-zinc-850/60 border border-neutral-100 dark:border-zinc-800 text-center">
-            <span className="text-[10px] text-neutral-500 block uppercase font-medium">Card / POS</span>
-            <p className="font-display font-bold text-xs text-neutral-900 dark:text-neutral-100 mt-0.5">
-              {currency}{gstData.tenders.card.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
-            </p>
-          </div>
+          <p className="text-[10px] text-neutral-500 dark:text-zinc-400 italic">
+            * Offset supplier purchase credits from GSTR-2B before generating the final challan.
+          </p>
         </div>
       </div>
 
@@ -332,52 +389,123 @@ export const GSTFilingView = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-zinc-800/60 font-sans">
-                {gstData.table12.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-neutral-50/50 dark:hover:bg-zinc-850/40 transition-colors">
-                    <td className="py-2.5 px-3 font-mono font-bold text-neutral-900 dark:text-neutral-100">
-                      {row.isMissingHsn ? (
-                        <span className="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 text-[10px]">
-                          999999
-                        </span>
-                      ) : (
-                        row.hsnCode
+                {gstData.table12.map((row, idx) => {
+                  const isExpanded = expandedHsns.has(row.hsnCode);
+                  const hasItems = row.items && row.items.length > 0;
+
+                  return (
+                    <React.Fragment key={idx}>
+                      <tr 
+                        onClick={() => hasItems && toggleHsnExpand(row.hsnCode)}
+                        className={`transition-colors ${
+                          hasItems ? 'cursor-pointer hover:bg-neutral-50/70 dark:hover:bg-zinc-850/60' : ''
+                        } ${isExpanded ? 'bg-rust-50/20 dark:bg-rust-950/20' : ''}`}
+                      >
+                        <td className="py-2.5 px-3 font-mono font-bold text-neutral-900 dark:text-neutral-100">
+                          <div className="flex items-center gap-1.5">
+                            {hasItems && (
+                              <button 
+                                type="button" 
+                                className="p-0.5 rounded text-neutral-400 hover:text-neutral-700 dark:hover:text-zinc-200"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleHsnExpand(row.hsnCode);
+                                }}
+                              >
+                                {isExpanded ? (
+                                  <ChevronUp className="w-3.5 h-3.5 text-rust-600 dark:text-rust-400" />
+                                ) : (
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            )}
+                            {row.isMissingHsn ? (
+                              <span className="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 text-[10px]">
+                                999999
+                              </span>
+                            ) : (
+                              row.hsnCode
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 text-neutral-800 dark:text-zinc-200 font-medium max-w-[200px] truncate" title={row.description}>
+                          {row.description}
+                          {hasItems && (
+                            <span className="text-[10px] text-rust-600 dark:text-rust-400 font-semibold ml-1.5 inline-block">
+                              ({row.items.length} {row.items.length === 1 ? 'variety' : 'varieties'})
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-neutral-500 text-[11px] font-mono">
+                          {row.uqc}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-display font-semibold text-neutral-900 dark:text-neutral-100">
+                          {row.totalQty}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-display font-semibold text-neutral-900 dark:text-neutral-100">
+                          {currency}{row.totalValue.toFixed(2)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-display font-semibold text-neutral-900 dark:text-neutral-100">
+                          {currency}{row.taxableValue.toFixed(2)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right text-neutral-800 dark:text-zinc-200 font-medium">
+                          {row.rate}%
+                          <span className="text-[10px] text-neutral-400 block font-normal font-sans">
+                            ({row.cgstRate}% + {row.sgstRate}%)
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-neutral-800 dark:text-zinc-200">
+                          {currency}{row.cgst.toFixed(2)}
+                          <span className="text-[10px] text-neutral-400 block font-normal font-sans">
+                            @ {row.cgstRate}%
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-neutral-800 dark:text-zinc-200">
+                          {currency}{row.sgst.toFixed(2)}
+                          <span className="text-[10px] text-neutral-400 block font-normal font-sans">
+                            @ {row.sgstRate}%
+                          </span>
+                        </td>
+                      </tr>
+
+                      {/* Expandable Product Varieties Details Grid */}
+                      {isExpanded && hasItems && (
+                        <tr className="bg-neutral-50/70 dark:bg-zinc-850/40 border-b border-neutral-200/60 dark:border-zinc-800/60">
+                          <td colSpan={9} className="p-3 pl-8">
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between text-[11px] font-semibold text-neutral-600 dark:text-zinc-400">
+                                <span>Specific Shop Items Filed under HSN {row.hsnCode}:</span>
+                                <span>Total: {row.items.length} Products</span>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                {row.items.map((it, itIdx) => (
+                                  <div 
+                                    key={itIdx}
+                                    className={`p-2.5 rounded-xl border text-[11px] space-y-1 ${
+                                      it.isUnitemized 
+                                        ? 'bg-amber-50/60 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800/50'
+                                        : 'bg-white dark:bg-zinc-800 border-neutral-200/80 dark:border-zinc-700/80'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between font-bold text-neutral-900 dark:text-neutral-100">
+                                      <span className="truncate max-w-[150px]" title={it.productName}>{it.productName}</span>
+                                      <span>{currency}{it.gross.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-[10px] text-neutral-500 dark:text-zinc-400">
+                                      <span>Qty: {it.qty} {it.unit}</span>
+                                      <span>Taxable: {currency}{it.taxable.toFixed(2)}</span>
+                                      <span>GST: {currency}{it.totalTax.toFixed(2)}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
                       )}
-                    </td>
-                    <td className="py-2.5 px-3 text-neutral-800 dark:text-zinc-200 font-medium max-w-[150px] truncate" title={row.description}>
-                      {row.description}
-                    </td>
-                    <td className="py-2.5 px-3 text-neutral-500 text-[11px] font-mono">
-                      {row.uqc}
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-display font-semibold text-neutral-900 dark:text-neutral-100">
-                      {row.totalQty}
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-display font-semibold text-neutral-900 dark:text-neutral-100">
-                      {currency}{row.totalValue.toFixed(2)}
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-display font-semibold text-neutral-900 dark:text-neutral-100">
-                      {currency}{row.taxableValue.toFixed(2)}
-                    </td>
-                    <td className="py-2.5 px-3 text-right text-neutral-800 dark:text-zinc-200 font-medium">
-                      {row.rate}%
-                      <span className="text-[10px] text-neutral-400 block font-normal font-sans">
-                        ({row.cgstRate}% + {row.sgstRate}%)
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono text-neutral-800 dark:text-zinc-200">
-                      {currency}{row.cgst.toFixed(2)}
-                      <span className="text-[10px] text-neutral-400 block font-normal font-sans">
-                        @ {row.cgstRate}%
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono text-neutral-800 dark:text-zinc-200">
-                      {currency}{row.sgst.toFixed(2)}
-                      <span className="text-[10px] text-neutral-400 block font-normal font-sans">
-                        @ {row.sgstRate}%
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-neutral-300 dark:border-zinc-700 font-display font-bold text-neutral-900 dark:text-neutral-100">

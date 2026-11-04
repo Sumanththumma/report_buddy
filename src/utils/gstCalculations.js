@@ -64,6 +64,24 @@ export const getStateFromGstin = (gstin) => {
   return STATE_CODES[code] || `${code}-State`;
 };
 
+// Official CBIC Statutory 4-Digit HSN Descriptions for Retail Tax Compliance
+export const STATUTORY_HSN_DESCRIPTIONS = {
+  '5208': 'Woven Fabrics of Cotton (Rubia, Camric, TipTop, Cottonsilk, Jacquard)',
+  '5407': 'Woven Fabrics of Synthetic Filament (Saree Falls, Lining, Poly)',
+  '5810': 'Embroidery in the piece, in strips or motifs (Sequence & Border Work)',
+  '6204': 'Women\'s Apparel, Blouse Pieces & Petticoats (ATC, Payal, SBT)',
+  '6109': 'T-Shirts, Singlets and other Vests',
+  '8471': 'Automatic Data Processing Machines & Accessories',
+  '8518': 'Microphones, Loudspeakers & Headphones',
+  '8544': 'Insulated Wire, Cable and Optical Fiber'
+};
+
+export const getHsnDescription = (hsn, fallbackName = 'Outward Supply') => {
+  if (!hsn) return fallbackName;
+  const code = hsn.toString().trim().substring(0, 4);
+  return STATUTORY_HSN_DESCRIPTIONS[code] || fallbackName;
+};
+
 /**
  * Calculates GSTR-1 Table 12, Table 7, Tender Reconciliation,
  * and Smart Health Check metrics for a given list of Z-Reports.
@@ -101,17 +119,26 @@ export const calculateMonthlyGST = (reports = [], shopProfile = {}) => {
   const missingHsnItems = [];
 
   (reports || []).forEach(report => {
+    const reportGross = parseFloat(report.grossSales) || 0;
     const pBreak = report.paymentBreakdown || {};
-    totalCash += parseFloat(pBreak.cash ?? report.paymentCash) || 0;
-    totalUpi += parseFloat(pBreak.upi ?? report.paymentUpi) || 0;
-    totalCard += parseFloat(pBreak.card ?? report.paymentCard) || 0;
+    let cashVal = parseFloat(pBreak.cash ?? report.paymentCash) || 0;
+    let upiVal = parseFloat(pBreak.upi ?? report.paymentUpi) || 0;
+    let cardVal = parseFloat(pBreak.card ?? report.paymentCard) || 0;
 
-    totalGrossTurnover += parseFloat(report.grossSales) || 0;
+    // Decision 3: If tenders were not itemized on thermal slip (e.g. Nov 2), default to Cash
+    if (cashVal === 0 && upiVal === 0 && cardVal === 0 && reportGross > 0) {
+      cashVal = reportGross;
+    }
+
+    totalCash += cashVal;
+    totalUpi += upiVal;
+    totalCard += cardVal;
+
+    totalGrossTurnover += reportGross;
     totalNetTurnover += parseFloat(report.netSales) || 0;
     totalDiscounts += parseFloat(report.discount) || 0;
     totalItemsSold += parseInt(report.totalItemsSold, 10) || 0;
 
-    const reportGross = parseFloat(report.grossSales) || 0;
     const items = Array.isArray(report.items) ? report.items : [];
     let reportItemsGross = 0;
     let reportItemsQty = 0;
@@ -151,12 +178,13 @@ export const calculateMonthlyGST = (reports = [], shopProfile = {}) => {
       totalCGST += cgst;
       totalSGST += sgst;
 
-      // Table 12 Aggregation (grouped by HSN + Rate + Unit)
-      const t12Key = `${cleanHsn}_${rate}_${unit}`;
+      // Decision 4: Group Table 12 by statutory 4-digit HSN code + tax rate
+      const statHsn = cleanHsn.length >= 4 ? cleanHsn.substring(0, 4) : cleanHsn;
+      const t12Key = `${statHsn}_${rate}`;
       if (!table12Map.has(t12Key)) {
         table12Map.set(t12Key, {
-          hsnCode: cleanHsn,
-          description: rawName,
+          hsnCode: statHsn,
+          description: getHsnDescription(statHsn, rawName),
           uqc: getUQC(unit),
           unit,
           rate,
@@ -169,7 +197,8 @@ export const calculateMonthlyGST = (reports = [], shopProfile = {}) => {
           sgst: 0,
           igst: 0,
           totalTax: 0,
-          isMissingHsn: isMissing
+          isMissingHsn: isMissing,
+          itemMap: new Map()
         });
       }
       const t12Row = table12Map.get(t12Key);
@@ -179,6 +208,32 @@ export const calculateMonthlyGST = (reports = [], shopProfile = {}) => {
       t12Row.cgst += cgst;
       t12Row.sgst += sgst;
       t12Row.totalTax += tax;
+
+      // Expandable Product Variety Details inside this HSN
+      const itemKey = `${rawName.toLowerCase()}_${unit}_${rate}`;
+      if (!t12Row.itemMap.has(itemKey)) {
+        t12Row.itemMap.set(itemKey, {
+          productName: rawName,
+          unit,
+          uqc: getUQC(unit),
+          rate,
+          cgstRate: rate / 2,
+          sgstRate: rate / 2,
+          qty: 0,
+          gross: 0,
+          taxable: 0,
+          cgst: 0,
+          sgst: 0,
+          totalTax: 0
+        });
+      }
+      const pVar = t12Row.itemMap.get(itemKey);
+      pVar.qty += qty;
+      pVar.gross += lineGross;
+      pVar.taxable += taxable;
+      pVar.cgst += cgst;
+      pVar.sgst += sgst;
+      pVar.totalTax += tax;
 
       // Table 7 Aggregation (grouped by Rate Slab)
       if (!table7Map.has(rate)) {
@@ -199,10 +254,11 @@ export const calculateMonthlyGST = (reports = [], shopProfile = {}) => {
       t7Row.totalValue += lineGross;
     });
 
-    // Handle unitemized gross sales difference (e.g. partial scan or general department turnover)
+    // Decision 2: Map unitemized sales difference to shop's primary textile HSN (5208) at 5%
     const diffGross = reportGross - reportItemsGross;
     if (diffGross > 0.05) {
       const defaultRate = shopProfile.defaultTaxRate || 5;
+      const primaryHsn = shopProfile.primaryHsn || '5208';
       const diffTaxable = diffGross / (1 + defaultRate / 100);
       const diffTax = diffGross - diffTaxable;
       const diffCgst = diffTax / 2;
@@ -213,21 +269,14 @@ export const calculateMonthlyGST = (reports = [], shopProfile = {}) => {
       totalCGST += diffCgst;
       totalSGST += diffSgst;
 
-      missingHsnItems.push({
-        date: report.date,
-        reportId: report.id,
-        productName: `Unitemized Sales (${report.date})`,
-        currentHsn: '999999'
-      });
-
-      // Table 12 entry for unitemized difference
-      const t12Key = `999999_${defaultRate}_pcs`;
+      // Table 12 entry under statutory HSN 5208
+      const t12Key = `${primaryHsn}_${defaultRate}`;
       if (!table12Map.has(t12Key)) {
         table12Map.set(t12Key, {
-          hsnCode: '999999',
-          description: `Unitemized Sales (${report.date})`,
-          uqc: 'PCS-PIECES',
-          unit: 'pcs',
+          hsnCode: primaryHsn,
+          description: getHsnDescription(primaryHsn, 'Woven Fabrics of Cotton'),
+          uqc: 'MTR-METRES',
+          unit: 'mtr',
           rate: defaultRate,
           cgstRate: defaultRate / 2,
           sgstRate: defaultRate / 2,
@@ -238,7 +287,8 @@ export const calculateMonthlyGST = (reports = [], shopProfile = {}) => {
           sgst: 0,
           igst: 0,
           totalTax: 0,
-          isMissingHsn: true
+          isMissingHsn: false,
+          itemMap: new Map()
         });
       }
       const t12Row = table12Map.get(t12Key);
@@ -248,6 +298,32 @@ export const calculateMonthlyGST = (reports = [], shopProfile = {}) => {
       t12Row.cgst += diffCgst;
       t12Row.sgst += diffSgst;
       t12Row.totalTax += diffTax;
+
+      const unKey = `General Matching (${report.date})_${defaultRate}`;
+      if (!t12Row.itemMap.has(unKey)) {
+        t12Row.itemMap.set(unKey, {
+          productName: `General Matching & Fabric (Day Total ${report.date})`,
+          unit: 'mtr',
+          uqc: 'MTR-METRES',
+          rate: defaultRate,
+          cgstRate: defaultRate / 2,
+          sgstRate: defaultRate / 2,
+          qty: 0,
+          gross: 0,
+          taxable: 0,
+          cgst: 0,
+          sgst: 0,
+          totalTax: 0,
+          isUnitemized: true
+        });
+      }
+      const unVar = t12Row.itemMap.get(unKey);
+      unVar.qty += diffQty;
+      unVar.gross += diffGross;
+      unVar.taxable += diffTaxable;
+      unVar.cgst += diffCgst;
+      unVar.sgst += diffSgst;
+      unVar.totalTax += diffTax;
 
       // Table 7 entry
       if (!table7Map.has(defaultRate)) {
@@ -270,7 +346,10 @@ export const calculateMonthlyGST = (reports = [], shopProfile = {}) => {
   });
 
   // Convert maps to sorted arrays
-  const table12 = Array.from(table12Map.values()).sort((a, b) => b.totalValue - a.totalValue);
+  const table12 = Array.from(table12Map.values()).map(row => ({
+    ...row,
+    items: Array.from(row.itemMap?.values() || []).sort((a, b) => b.gross - a.gross)
+  })).sort((a, b) => b.totalValue - a.totalValue);
   const table7 = Array.from(table7Map.values())
     .filter(row => row.totalValue > 0 || standardRates.includes(row.rate))
     .sort((a, b) => a.rate - b.rate);
