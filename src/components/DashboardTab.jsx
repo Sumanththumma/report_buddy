@@ -69,34 +69,30 @@ export const DashboardTab = ({ onOpenPersonalization }) => {
         </div>
 
         <div className="text-right">
-          <span className="text-[11px] font-display font-semibold text-neutral-600 dark:text-zinc-400 block">
+          <span className="text-[11px] font-semibold text-neutral-600 dark:text-zinc-400 block">
             {formattedToday}
           </span>
-          <span className="inline-flex items-center gap-1 text-[9px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.2 rounded-full border border-emerald-500/20 mt-0.5" title="All sales data and products are continuously persisted">
+          <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/60 mt-0.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            {dbStatus?.cloud ? 'Cloud Synced' : 'SQLite Synced'}
+            {dbStatus?.cloud ? 'Cloud Connected' : 'Auto-Saved'}
           </span>
         </div>
       </div>
 
-      {/* Hero Financial Metric Card with subtle sprayed rust & copper airbrush glow */}
-      <div className="rounded-3xl p-5 bg-gradient-to-b from-neutral-900 via-zinc-900 to-neutral-950 text-white border border-rust-500/25 dark:border-rust-500/30 shadow-2xl shadow-rust-950/30 relative overflow-hidden">
-        {/* Sprayed rust & copper ambient spots */}
-        <div className="absolute -top-10 -right-10 w-44 h-44 bg-rust-600/25 rounded-full blur-2xl pointer-events-none" />
-        <div className="absolute -bottom-10 -left-10 w-36 h-36 bg-copper-500/20 rounded-full blur-2xl pointer-events-none" />
-
+      {/* Hero Financial Metric Card */}
+      <div className="rounded-2xl p-5 bg-gradient-to-br from-neutral-900 via-zinc-900 to-neutral-950 text-white border border-neutral-800 shadow-md relative overflow-hidden">
         <div className="relative z-10 space-y-3">
           <div className="flex items-center justify-between text-xs text-neutral-400">
-            <span className="text-[11px] font-medium tracking-wider uppercase text-rust-300/90">
+            <span className="text-[11px] font-semibold tracking-wider uppercase text-rust-300">
               {todayReport ? "Verified Daily Revenue" : "Month-to-Date Revenue"}
             </span>
-            <span className="text-[10px] font-display font-semibold px-2.5 py-0.5 rounded-full bg-rust-500/15 text-rust-300 border border-rust-500/30">
+            <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-rust-500/20 text-rust-300 border border-rust-500/30">
               {todayReport ? 'Shift Closed' : 'EOD Active'}
             </span>
           </div>
 
           <div className="flex items-baseline space-x-1">
-            <span className="font-display text-4xl font-extrabold tracking-tight text-white">
+            <span className="text-3xl sm:text-4xl font-bold tracking-tight text-white tabular-nums">
               {shopProfile.currency} {
                 todayReport 
                   ? todayReport.netSales.toLocaleString() 
@@ -106,12 +102,12 @@ export const DashboardTab = ({ onOpenPersonalization }) => {
           </div>
 
           {todayReport ? (
-            <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-medium">
-              <CheckCircle2 className="w-3.5 h-3.5" />
+            <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-medium">
+              <CheckCircle2 className="w-4 h-4" />
               <span>{todayReport.reportNumber || 'Z-Report'} logged ({todayReport.totalItemsSold} units sold)</span>
             </div>
           ) : (
-            <p className="text-[11px] text-neutral-400 font-medium">
+            <p className="text-xs text-neutral-400 font-medium">
               Snap photo of closing Z-Report at store shut.
             </p>
           )}
@@ -119,25 +115,25 @@ export const DashboardTab = ({ onOpenPersonalization }) => {
           {/* Key Metric Highlights */}
           <div className="grid grid-cols-3 gap-2 pt-3 border-t border-white/10 text-center">
             <div className="py-1">
-              <span className="text-[10px] text-neutral-400 uppercase font-medium">Reported</span>
-              <p className="font-display text-sm font-bold text-white mt-0.5">{currentMonthReports.length} days</p>
+              <span className="text-[10px] text-neutral-400 uppercase font-semibold">Reported</span>
+              <p className="text-sm font-bold text-white mt-0.5 tabular-nums">{currentMonthReports.length} days</p>
             </div>
             <div className="py-1 border-x border-white/10">
-              <span className="text-[10px] text-neutral-400 uppercase font-medium">Units Sold</span>
-              <p className="font-display text-sm font-bold text-white mt-0.5">{currentMonthUnits}</p>
+              <span className="text-[10px] text-neutral-400 uppercase font-semibold">Units Sold</span>
+              <p className="text-sm font-bold text-white mt-0.5 tabular-nums">{currentMonthUnits}</p>
             </div>
             <div className="py-1">
-              <span className="text-[10px] text-neutral-400 uppercase font-medium">Catalog</span>
-              <p className="font-display text-sm font-bold text-white mt-0.5">{products.length} prods</p>
+              <span className="text-[10px] text-neutral-400 uppercase font-semibold">Catalog</span>
+              <p className="text-sm font-bold text-white mt-0.5 tabular-nums">{products.length} prods</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Main EOD Scanner Trigger Card (Understated, Sleek Apple Card) */}
+      {/* Main EOD Scanner Trigger Card */}
       <div 
         onClick={() => setActiveTab('ai_scan')}
-        className="cursor-pointer bg-white dark:bg-zinc-900 border border-neutral-200/80 dark:border-zinc-800/80 hover:border-rust-500/40 dark:hover:border-rust-500/40 rounded-2xl p-4 transition-all duration-200 shadow-sm hover:shadow-spray-rust group"
+        className="cursor-pointer bg-white dark:bg-zinc-900 border border-neutral-200/80 dark:border-zinc-800/80 hover:border-rust-500/40 dark:hover:border-rust-500/40 rounded-2xl p-4 transition-all duration-200 shadow-xs hover:shadow-md group"
       >
         <div className="flex items-center space-x-3.5">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-rust-700 to-copper-600 text-white flex items-center justify-center shrink-0 shadow-spray-rust group-hover:scale-105 transition-transform">

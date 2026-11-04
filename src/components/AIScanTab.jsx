@@ -826,7 +826,7 @@ export const AIScanTab = ({ onOpenSettings }) => {
                     Review Discovered Products ({newProductsConfig.length})
                   </span>
                   <span className="text-[10px] text-neutral-500 dark:text-zinc-400">
-                    Your manual catalog is the holy grail
+                    Existing catalog items are never overwritten
                   </span>
                 </div>
 
@@ -932,7 +932,7 @@ export const AIScanTab = ({ onOpenSettings }) => {
                                 Variety Linked to Master:
                               </div>
                               <p className="leading-snug">
-                                Receipts for <strong>"{prod.name}"</strong> will be recorded under catalog master <strong>"{selectedTarget.name}"</strong> with Holy Grail HSN <span className="font-mono font-bold text-neutral-900 dark:text-neutral-100">{selectedTarget.hsnCode || 'N/A'}</span> and <span className="font-bold text-neutral-900 dark:text-neutral-100">{selectedTarget.taxRate}% GST</span>.
+                                Receipts for <strong>"{prod.name}"</strong> will be recorded under catalog master <strong>"{selectedTarget.name}"</strong> with verified HSN <span className="font-mono font-bold text-neutral-900 dark:text-neutral-100">{selectedTarget.hsnCode || 'N/A'}</span> and <span className="font-bold text-neutral-900 dark:text-neutral-100">{selectedTarget.taxRate}% GST</span>.
                               </p>
                             </div>
                           ) : (
@@ -1144,7 +1144,7 @@ export const AIScanTab = ({ onOpenSettings }) => {
                       <div className="flex items-center gap-1.5">
                         {isExisting ? (
                           <span className="text-[9px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/40">
-                            ✓ In Store Catalog (Holy Grail)
+                            ✓ In Store Catalog
                           </span>
                         ) : newProdConfig?.action === 'merge' ? (
                           <span className="text-[9px] font-bold text-rust-700 dark:text-rust-300 bg-rust-50 dark:bg-rust-950/50 px-2 py-0.5 rounded-md border border-rust-200 dark:border-rust-800/40 flex items-center gap-1">

@@ -175,10 +175,10 @@ export const MonthlyAnalyticsTab = () => {
   // -------------------------------------------------------------
   // Dynamic SVG Curve Math for 1 or more reports
   // -------------------------------------------------------------
-  const svgWidth = 340;
-  const svgHeight = 150;
-  const paddingX = 24;
-  const paddingY = 22;
+  const svgWidth = 640;
+  const svgHeight = 160;
+  const paddingX = 32;
+  const paddingY = 24;
   const plotWidth = svgWidth - paddingX * 2;
   const plotHeight = svgHeight - paddingY * 2;
 
@@ -483,7 +483,7 @@ export const MonthlyAnalyticsTab = () => {
                         x={pt.x}
                         y={svgHeight - 6}
                         textAnchor="middle"
-                        fontSize="9"
+                        fontSize="11"
                         fontWeight="600"
                         className="fill-neutral-600 dark:fill-zinc-400 font-mono"
                       >

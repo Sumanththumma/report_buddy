@@ -8,9 +8,9 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        display: ['Montserrat', 'system-ui', 'sans-serif'],
-        sans: ['Ubuntu Sans', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
-        mono: ['SF Mono', 'Fira Code', 'monospace']
+        display: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        mono: ['JetBrains Mono', 'SF Mono', 'Fira Code', 'Consolas', 'monospace']
       },
       colors: {
         zinc: {
@@ -42,9 +42,9 @@ export default {
         'apple-glass': '0 8px 32px 0 rgba(0, 0, 0, 0.36)',
         'apple-card': '0 2px 8px -1px rgba(0,0,0,0.06), 0 1px 3px -1px rgba(0,0,0,0.04)',
         'apple-card-dark': '0 4px 20px -2px rgba(0,0,0,0.5)',
-        'spray-rust': '0 0 35px 2px rgba(194, 65, 12, 0.22)',
-        'spray-rust-subtle': '0 0 50px 6px rgba(194, 65, 12, 0.12)',
-        'spray-copper': '0 0 30px -3px rgba(224, 122, 95, 0.25)',
+        'spray-rust': '0 2px 8px -1px rgba(234, 88, 12, 0.2), 0 1px 3px -1px rgba(0, 0, 0, 0.08)',
+        'spray-rust-subtle': '0 1px 4px -1px rgba(234, 88, 12, 0.12)',
+        'spray-copper': '0 2px 8px -1px rgba(224, 122, 95, 0.2)',
         'subtle-inner': 'inset 0 1px 0 0 rgba(255, 255, 255, 0.08)',
       },
       animation: {

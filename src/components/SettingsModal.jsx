@@ -313,12 +313,12 @@ export const SettingsModal = ({ isOpen, onClose }) => {
             </span>
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              SQLite Persistent
+              Cloud & Local Synced
             </span>
           </div>
 
           <p className="text-[10px] text-neutral-500 dark:text-zinc-400 leading-snug">
-            Your products, daily Z-reports, and AI API keys are stored in an encrypted SQLite database on the server.
+            Your catalog items, daily sales Z-reports, and configuration are safely saved and encrypted.
           </p>
 
           <div className="flex items-center gap-2 pt-1">

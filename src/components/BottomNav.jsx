@@ -20,8 +20,8 @@ export const BottomNav = () => {
   ];
 
   return (
-    <div className="fixed bottom-4 left-0 right-0 max-w-md mx-auto px-4 z-40 pointer-events-none">
-      <nav className="pointer-events-auto bg-white/85 dark:bg-zinc-900/85 backdrop-blur-2xl border border-neutral-200/80 dark:border-zinc-800/80 rounded-full px-3 py-1.5 shadow-2xl shadow-rust-950/10 flex items-center justify-between transition-colors">
+    <div className="md:hidden fixed bottom-4 left-0 right-0 max-w-md mx-auto px-4 z-40 pointer-events-none">
+      <nav className="pointer-events-auto bg-white/90 dark:bg-zinc-900/90 backdrop-blur-2xl border border-neutral-200/80 dark:border-zinc-800/80 rounded-full px-3 py-1.5 shadow-xl flex items-center justify-between transition-colors">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;

@@ -18,7 +18,7 @@ const ThemeContext = createContext();
 export const THEME_PALETTES = {
   rust: {
     id: 'rust',
-    name: 'Sprayed Rust & Terracotta',
+    name: 'Warm Rust & Terracotta',
     primary: '#c2410c',
     primaryDark: '#ea580c',
     accent: 'bg-rust-600 text-white dark:bg-rust-500 dark:text-zinc-950 shadow-spray-rust',

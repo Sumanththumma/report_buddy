@@ -70,7 +70,7 @@ const MainContent = () => {
   if (isAuthLoading) {
     return (
       <MobileFrame>
-        <div className="flex-1 flex flex-col items-center justify-center space-y-3">
+        <div className="flex-1 flex flex-col items-center justify-center space-y-3 min-h-[60vh]">
           <motion.div 
             animate={{ scale: [0.95, 1.05, 0.95], opacity: [0.6, 1, 0.6] }}
             transition={{ repeat: Infinity, duration: 1.8, ease: 'easeInOut' }}
@@ -90,16 +90,18 @@ const MainContent = () => {
   if (!isAuthenticated) {
     return (
       <MobileFrame>
-        <WelcomeScreen
-          onOpenLogin={() => {
-            setAuthMode('login');
-            setIsAuthOpen(true);
-          }}
-          onOpenRegister={() => {
-            setAuthMode('register');
-            setIsAuthOpen(true);
-          }}
-        />
+        <div className="flex-1 flex flex-col justify-center items-center w-full max-w-lg mx-auto px-4 py-8">
+          <WelcomeScreen
+            onOpenLogin={() => {
+              setAuthMode('login');
+              setIsAuthOpen(true);
+            }}
+            onOpenRegister={() => {
+              setAuthMode('register');
+              setIsAuthOpen(true);
+            }}
+          />
+        </div>
 
         {/* Authentication Modal with Spring Motion */}
         <AuthModal 
@@ -124,7 +126,7 @@ const MainContent = () => {
       />
 
       {/* Main Tab Content */}
-      <main className="flex-1 p-3.5 max-w-md mx-auto w-full">
+      <main className="flex-1 max-w-4xl mx-auto w-full px-3.5 sm:px-6 lg:px-8 py-3 sm:py-5">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
