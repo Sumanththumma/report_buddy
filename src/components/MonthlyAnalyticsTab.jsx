@@ -18,8 +18,10 @@ import {
   Banknote,
   CheckCircle2,
   ArrowUpRight,
-  ChevronRight
+  ChevronRight,
+  Building2
 } from 'lucide-react';
+import { GSTFilingView } from './GSTFilingView';
 
 export const MonthlyAnalyticsTab = () => {
   const { 
@@ -29,7 +31,11 @@ export const MonthlyAnalyticsTab = () => {
     setSelectedJournalDate, 
     setActiveTab,
     selectedAnalyticsMonth,
-    setSelectedAnalyticsMonth
+    setSelectedAnalyticsMonth,
+    products,
+    updateProduct,
+    addProduct,
+    showToast
   } = useApp();
 
   const { theme } = useTheme();
@@ -38,6 +44,34 @@ export const MonthlyAnalyticsTab = () => {
   const [rankingMode, setRankingMode] = useState('quantity'); // 'quantity' or 'revenue'
   const [chartMode, setChartMode] = useState('trajectory'); // 'trajectory' or 'bars'
   const [hoveredPoint, setHoveredPoint] = useState(null);
+  const [analyticsSubTab, setAnalyticsSubTab] = useState('sales'); // 'sales' | 'gst'
+
+  const handleUpdateProductHsn = async (productName, newHsn, newTaxRate) => {
+    try {
+      const existing = (products || []).find(
+        p => p.name?.trim().toLowerCase() === productName.trim().toLowerCase()
+      );
+      if (existing) {
+        await updateProduct(existing.id, {
+          ...existing,
+          hsn: newHsn,
+          taxRate: newTaxRate
+        });
+      } else {
+        await addProduct({
+          name: productName,
+          category: 'Matching & Fabric',
+          hsn: newHsn,
+          taxRate: newTaxRate,
+          unit: 'pcs'
+        });
+      }
+      showToast?.(`Updated HSN for ${productName} to ${newHsn}`, 'success');
+    } catch (err) {
+      console.error('Failed to update product HSN:', err);
+      showToast?.(`Failed to update HSN: ${err.message}`, 'error');
+    }
+  };
 
   // Available months containing data
   const availableMonths = Array.from(new Set(
@@ -244,6 +278,45 @@ export const MonthlyAnalyticsTab = () => {
         </div>
       </div>
 
+      {/* Segmented Sub-Tab Switcher: Sales Analytics vs GST & CA Filing */}
+      <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-neutral-100 dark:bg-zinc-800/80 border border-neutral-200/80 dark:border-zinc-700/80">
+        <button
+          type="button"
+          onClick={() => setAnalyticsSubTab('sales')}
+          className={`flex-1 py-2 px-3 rounded-xl font-display font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+            analyticsSubTab === 'sales'
+              ? 'bg-white dark:bg-zinc-900 text-neutral-900 dark:text-neutral-100 shadow-2xs'
+              : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-zinc-200'
+          }`}
+        >
+          <BarChart3 className="w-3.5 h-3.5 text-rust-600 dark:text-rust-400" />
+          Sales Intelligence
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setAnalyticsSubTab('gst')}
+          className={`flex-1 py-2 px-3 rounded-xl font-display font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+            analyticsSubTab === 'gst'
+              ? 'bg-white dark:bg-zinc-900 text-neutral-900 dark:text-neutral-100 shadow-2xs'
+              : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-zinc-200'
+          }`}
+        >
+          <Building2 className="w-3.5 h-3.5 text-rust-600 dark:text-rust-400" />
+          GST & CA Filing
+        </button>
+      </div>
+
+      {analyticsSubTab === 'gst' ? (
+        <GSTFilingView
+          monthReports={monthReports}
+          selectedMonth={activeMonth}
+          shopProfile={shopProfile}
+          products={products}
+          onUpdateProductHsn={handleUpdateProductHsn}
+        />
+      ) : (
+        <>
       {/* Hero Financial Metric Card with Sprayed Rust Aura */}
       <motion.div 
         initial={{ opacity: 0, y: 10 }}
@@ -762,6 +835,8 @@ export const MonthlyAnalyticsTab = () => {
           ))}
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 };
