@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
   Calendar, 
@@ -10,7 +10,8 @@ import {
   Clock,
   Printer,
   RefreshCw,
-  AlertTriangle
+  AlertTriangle,
+  X
 } from 'lucide-react';
 
 // Robust local date formatting helpers (prevents UTC timezone shift)
@@ -39,6 +40,8 @@ export const DailyJournalTab = () => {
     shopProfile, 
     deleteZReport 
   } = useApp();
+
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   const changeDate = (days) => {
     const cur = parseLocalDate(selectedJournalDate);
@@ -290,11 +293,8 @@ export const DailyJournalTab = () => {
                 </button>
 
                 <button
-                  onClick={() => {
-                    if (confirm(`Permanently delete the Z-Report for ${formattedDisplay}?\n\nThis will remove the report and its line items. You will be able to re-upload a new scan for this date anytime.`)) {
-                      deleteZReport(currentReport.id || selectedJournalDate, currentReport.date || selectedJournalDate);
-                    }
-                  }}
+                  type="button"
+                  onClick={() => setIsDeleteModalOpen(true)}
                   className="py-2 px-3 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300 font-display font-semibold text-xs flex items-center justify-center gap-1.5 transition-all border border-red-200 dark:border-red-800/50 active:scale-95"
                 >
                   <Trash2 className="w-3.5 h-3.5 text-red-500" />
@@ -303,6 +303,77 @@ export const DailyJournalTab = () => {
               </div>
             </div>
           </div>
+
+          {/* Custom 2-Step Confirmation Modal for Permanent Delete */}
+          {isDeleteModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+              <div className="bg-white dark:bg-zinc-900 border border-neutral-200 dark:border-zinc-800 rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4 animate-scale-up">
+                {/* Icon & Title */}
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-red-100 dark:bg-red-950/60 border border-red-200 dark:border-red-800/60 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+                    <AlertTriangle className="w-5 h-5 stroke-[2]" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-display font-bold text-sm text-neutral-900 dark:text-neutral-100">
+                      Permanently Delete Report?
+                    </h3>
+                    <p className="text-[11px] text-neutral-500 dark:text-zinc-400 mt-0.5">
+                      This will permanently remove this day's sales record from your persistent database.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Report Summary Card */}
+                <div className="p-3 rounded-2xl bg-neutral-50 dark:bg-zinc-850/80 border border-neutral-100 dark:border-zinc-800 text-xs space-y-1.5">
+                  <div className="flex justify-between text-neutral-600 dark:text-zinc-400">
+                    <span>Date:</span>
+                    <span className="font-semibold text-neutral-900 dark:text-neutral-100">{formattedDisplay}</span>
+                  </div>
+                  <div className="flex justify-between text-neutral-600 dark:text-zinc-400">
+                    <span>Report No:</span>
+                    <span className="font-mono text-neutral-900 dark:text-neutral-100">{currentReport.reportNumber || 'Z-Report'}</span>
+                  </div>
+                  <div className="flex justify-between text-neutral-600 dark:text-zinc-400">
+                    <span>Total Net Sales:</span>
+                    <span className="font-display font-bold text-neutral-900 dark:text-neutral-100">
+                      {shopProfile.currency}{currentReport.netSales?.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-neutral-600 dark:text-zinc-400">
+                    <span>Line Items:</span>
+                    <span className="text-neutral-900 dark:text-neutral-100">{currentReport.items?.length || 0} products sold</span>
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/60 text-[11px] text-amber-900 dark:text-amber-200">
+                  You will be able to re-upload or scan a new Z-Report for this date anytime.
+                </div>
+
+                {/* Buttons */}
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsDeleteModalOpen(false)}
+                    className="py-2.5 px-3 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-zinc-800 dark:hover:bg-zinc-750 text-neutral-800 dark:text-zinc-200 font-display font-semibold text-xs transition-colors"
+                  >
+                    Cancel / Keep
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDeleteModalOpen(false);
+                      deleteZReport(currentReport.id || selectedJournalDate, currentReport.date || selectedJournalDate);
+                    }}
+                    className="py-2.5 px-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-display font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Yes, Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         /* Empty State */

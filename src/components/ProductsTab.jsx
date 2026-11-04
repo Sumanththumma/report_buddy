@@ -21,6 +21,7 @@ export const ProductsTab = () => {
   const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [productToDelete, setProductToDelete] = useState(null);
 
   // Dynamic categories computed from user's authentic products
   const categoryList = Array.from(new Set(products.map(p => (p.category || 'General').trim()).filter(Boolean)));
@@ -223,11 +224,8 @@ export const ProductsTab = () => {
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
                     <button
-                      onClick={() => {
-                        if (confirm(`Delete product "${product.name}"?`)) {
-                          deleteProduct(product.id);
-                        }
-                      }}
+                      type="button"
+                      onClick={() => setProductToDelete(product)}
                       className="p-1.5 rounded-lg text-neutral-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
                       title="Delete Product"
                     >
@@ -448,6 +446,74 @@ export const ProductsTab = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Custom 2-Step Confirmation Modal for Product Delete */}
+      {productToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white dark:bg-zinc-900 border border-neutral-200 dark:border-zinc-800 rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4 animate-scale-up">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-red-100 dark:bg-red-950/60 border border-red-200 dark:border-red-800/60 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 stroke-[2]" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-display font-bold text-sm text-neutral-900 dark:text-neutral-100">
+                  Delete Product from Catalog?
+                </h3>
+                <p className="text-[11px] text-neutral-500 dark:text-zinc-400 mt-0.5">
+                  Are you sure you want to permanently delete this product?
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-neutral-50 dark:bg-zinc-850/80 border border-neutral-100 dark:border-zinc-800 text-xs space-y-1.5">
+              <div className="flex justify-between text-neutral-600 dark:text-zinc-400">
+                <span>Product Name:</span>
+                <span className="font-bold text-neutral-900 dark:text-neutral-100">{productToDelete.name}</span>
+              </div>
+              <div className="flex justify-between text-neutral-600 dark:text-zinc-400">
+                <span>Category:</span>
+                <span className="text-neutral-900 dark:text-neutral-100">{productToDelete.category || 'General'}</span>
+              </div>
+              <div className="flex justify-between text-neutral-600 dark:text-zinc-400">
+                <span>HSN Code:</span>
+                <span className="font-mono text-neutral-900 dark:text-neutral-100">{productToDelete.hsnCode || 'N/A'}</span>
+              </div>
+              <div className="flex justify-between text-neutral-600 dark:text-zinc-400">
+                <span>Selling Price:</span>
+                <span className="font-display font-bold text-neutral-900 dark:text-neutral-100">
+                  {shopProfile.currency}{productToDelete.price?.toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-neutral-500 dark:text-zinc-400">
+              Past Z-Reports and daily journal entries that recorded sales of this product will keep their historical records intact.
+            </p>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setProductToDelete(null)}
+                className="py-2.5 px-3 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-zinc-800 dark:hover:bg-zinc-750 text-neutral-800 dark:text-zinc-200 font-display font-semibold text-xs transition-colors"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  deleteProduct(productToDelete.id);
+                  setProductToDelete(null);
+                }}
+                className="py-2.5 px-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-display font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Yes, Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

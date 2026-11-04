@@ -10,7 +10,8 @@ import {
   Trash2, 
   Layers,
   ChevronDown,
-  Printer
+  Printer,
+  AlertTriangle
 } from 'lucide-react';
 
 export const ReportsTab = () => {
@@ -19,6 +20,7 @@ export const ReportsTab = () => {
   const [dateFilter, setDateFilter] = useState('all'); // 'all', 'today', 'week', 'custom'
   const [customDate, setCustomDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [activeReportSubTab, setActiveReportSubTab] = useState('transactions'); // 'transactions' or 'hsn'
+  const [saleToDelete, setSaleToDelete] = useState(null);
 
   // Filter sales
   const todayStr = new Date().toISOString().split('T')[0];
@@ -207,11 +209,8 @@ export const ReportsTab = () => {
                       {shopProfile.currency}{sale.grandTotal?.toLocaleString()}
                     </span>
                     <button
-                      onClick={() => {
-                        if (confirm(`Delete invoice #${sale.invoiceNumber}?`)) {
-                          deleteSale(sale.id);
-                        }
-                      }}
+                      type="button"
+                      onClick={() => setSaleToDelete(sale)}
                       className="text-[10px] text-red-500 hover:text-red-700"
                     >
                       Delete
@@ -293,6 +292,66 @@ export const ReportsTab = () => {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Custom 2-Step Confirmation Modal for Invoice Delete */}
+      {saleToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white dark:bg-zinc-900 border border-neutral-200 dark:border-zinc-800 rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4 animate-scale-up">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-red-100 dark:bg-red-950/60 border border-red-200 dark:border-red-800/60 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5 stroke-[2]" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-display font-bold text-sm text-neutral-900 dark:text-neutral-100">
+                  Delete Invoice #{saleToDelete.invoiceNumber}?
+                </h3>
+                <p className="text-[11px] text-neutral-500 dark:text-zinc-400 mt-0.5">
+                  Are you sure you want to permanently delete this sales transaction?
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-neutral-50 dark:bg-zinc-850/80 border border-neutral-100 dark:border-zinc-800 text-xs space-y-1.5">
+              <div className="flex justify-between text-neutral-600 dark:text-zinc-400">
+                <span>Invoice:</span>
+                <span className="font-mono text-neutral-900 dark:text-neutral-100">#{saleToDelete.invoiceNumber}</span>
+              </div>
+              <div className="flex justify-between text-neutral-600 dark:text-zinc-400">
+                <span>Date:</span>
+                <span className="font-semibold text-neutral-900 dark:text-neutral-100">{saleToDelete.date}</span>
+              </div>
+              <div className="flex justify-between text-neutral-600 dark:text-zinc-400">
+                <span>Total Amount:</span>
+                <span className="font-display font-bold text-neutral-900 dark:text-neutral-100">
+                  {shopProfile.currency}{saleToDelete.grandTotal?.toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setSaleToDelete(null)}
+                className="py-2.5 px-3 rounded-xl bg-neutral-100 hover:bg-neutral-200 dark:bg-zinc-800 dark:hover:bg-zinc-750 text-neutral-800 dark:text-zinc-200 font-display font-semibold text-xs transition-colors"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  deleteSale(saleToDelete.id);
+                  setSaleToDelete(null);
+                }}
+                className="py-2.5 px-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-display font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Yes, Delete
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
