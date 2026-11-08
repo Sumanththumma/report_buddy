@@ -15,7 +15,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 5000;
 
 // Initialize database
 initDatabase();
@@ -621,7 +621,7 @@ app.use((req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
-// Start Express server
+// Start Express server on 0.0.0.0
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 RetailKhata Production Backend running on http://127.0.0.1:${PORT}`);
+  console.log(`🚀 RetailKhata Production Server running and listening on 0.0.0.0:${PORT}`);
 });

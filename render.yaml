@@ -9,5 +9,11 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: 10000
       - key: JWT_SECRET
         generateValue: true
+      - key: SUPABASE_URL
+        value: https://sqlhuaieflbsdrqgtxap.supabase.co
+      - key: SUPABASE_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNxbGh1YWllZmxic2RycWd0eGFwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MzU0ODM1MSwiZXhwIjoyMTA5MTI0MzUxfQ.dJOno1S8vjF7q1YhJChbNu4zuR0m4lQMoiOeN2LO_FE
